@@ -459,6 +459,17 @@
       <!-- FILTROS -->
       <div class="filtros">
         <div class="filtro-group">
+          <label>TIPO DE REFACCIÓN</label>
+          <div class="dropdown" id="dd-refac">
+            <button class="dropdown-btn" onclick="toggleDropdown('dd-refac')">
+              <span id="dd-refac-label">Todos</span>
+              <span id="dd-refac-badge"></span>
+              <span class="arrow-d">▼</span>
+            </button>
+            <div class="dropdown-content" id="dd-refac-content"></div>
+          </div>
+        </div>
+        <div class="filtro-group">
           <label>ALMACÉN</label>
           <div class="dropdown" id="dd-alm">
             <button class="dropdown-btn" onclick="toggleDropdown('dd-alm')">
@@ -750,6 +761,7 @@ let chartInstances = { 1:null, 2:null, 3:null };
 
 // Filtros (Set vacío = todos)
 const filtros = {
+  refac: { sel: new Set(), opts: ['Preventivos','Correctivos'] },  // clasificación por catálogo MP
   alm:   { sel: new Set(), opts: [] },
   tipo:  { sel: new Set(), opts: [] },
   exist: { sel: new Set(), opts: ['Con existencia','Sin existencia'] },
@@ -849,10 +861,14 @@ function procesarDatos() {
     const exist = parseFloat(String(r[cExist] || '0').replace(',', '.')) || 0;
     const mttoRaw = String(r[cMtto] || '').trim().toUpperCase();
     const familia = cFam ? (String(r[cFam] || '').trim() || 'Sin familia') : 'Sin familia';
+    // esPrev: la fila tiene MTTO reconocido en el catálogo → preventivo
+    const esPrev = tiposSet.size > 0 ? tiposSet.has(mttoRaw) : true; // sin catálogo: tratar todo como prev
     let tipo;
-    if (tiposSet.has(mttoRaw)) {
+    if (esPrev) {
+      // Tipo = valor del campo MTTO (Mecánico, Eléctrico, etc.)
       tipo = mttoRaw.charAt(0) + mttoRaw.slice(1).toLowerCase();
     } else {
+      // Tipo = familia (para correctivos/no clasificados)
       tipo = familia || 'Sin clasificar';
     }
     let dias = null;
@@ -861,7 +877,7 @@ function procesarDatos() {
       if (isFinite(dVal) && dVal >= 0) dias = dVal;
     }
     out.push({
-      codigo, almacen, existencia: exist, tipo,
+      codigo, almacen, existencia: exist, tipo, esPrev,
       desc:   String(r[cDesc] || '').trim(),
       clasif: cClas ? String(r[cClas] || '').trim() : '',
       tnec:   cTnec ? String(r[cTnec] || '').trim() : '',
@@ -877,11 +893,16 @@ function procesarDatos() {
 // POBLAR FILTROS (opciones únicas desde DATA)
 // ============================================================
 function poblarFiltros() {
+  // Opciones de tipo separadas: preventivos usan MTTO, correctivos usan familia
+  const prevRows = DATA.filter(r => r.esPrev);
+  const corrRows = DATA.filter(r => !r.esPrev);
   filtros.alm.opts  = [...new Set(DATA.map(r => r.almacen))].sort();
+  // Tipo de Mantenimiento: solo tipos preventivos (MTTO del catálogo)
+  // Los correctivos se agrupan por familia, se muestran cuando se filtra por Correctivos
   filtros.tipo.opts = [...new Set(DATA.map(r => r.tipo))].sort();
   filtros.clas.opts = [...new Set(DATA.map(r => r.clasif).filter(Boolean))].sort();
   filtros.tnec.opts = [...new Set(DATA.map(r => r.tnec).filter(Boolean))].sort();
-  ['alm','tipo','exist','clas','tnec'].forEach(k => { filtros[k].sel.clear(); renderDropdown(k); });
+  ['refac','alm','tipo','exist','clas','tnec'].forEach(k => { filtros[k].sel.clear(); renderDropdown(k); });
 }
 
 // ============================================================
@@ -980,7 +1001,7 @@ function mirrorDropdown(originId, mirrorId) {
 }
 
 function limpiarFiltros() {
-  ['alm','tipo','exist','clas','tnec'].forEach(k => {
+  ['refac','alm','tipo','exist','clas','tnec'].forEach(k => {
     filtros[k].sel.clear();
     renderDropdown(k);
   });
@@ -993,6 +1014,13 @@ function limpiarFiltros() {
 function aplicarFiltros(rows) {
   let r = rows;
   const fa = filtros;
+  // Filtro de tipo de refacción (Preventivos / Correctivos)
+  if (fa.refac.sel.size > 0 && !fa.refac.sel.has('__none__')) {
+    const prev = fa.refac.sel.has('Preventivos');
+    const corr = fa.refac.sel.has('Correctivos');
+    if (prev && !corr) r = r.filter(x => x.esPrev);
+    else if (corr && !prev) r = r.filter(x => !x.esPrev);
+  }
   if (fa.alm.sel.size > 0) {
     if (fa.alm.sel.has('__none__')) return [];
     r = r.filter(x => fa.alm.sel.has(x.almacen));
