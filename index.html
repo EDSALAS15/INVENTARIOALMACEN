@@ -143,6 +143,10 @@
       flex-wrap: wrap;
       gap: 10px;
       align-items: flex-end;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 2px 6px rgba(0,0,0,.08);
     }
     .filtro-group { display: flex; flex-direction: column; gap: 4px; }
     .filtro-group label {
@@ -454,78 +458,79 @@
   <!-- MAIN -->
   <main>
 
+    <!-- ====== FILTROS GLOBALES (compartidos entre todas las pestañas) ====== -->
+    <div class="filtros" id="filtros-globales">
+      <div class="filtro-group">
+        <label>TIPO DE REFACCIÓN</label>
+        <div class="dropdown" id="dd-refac">
+          <button class="dropdown-btn" onclick="toggleDropdown('dd-refac')">
+            <span id="dd-refac-label">Todos</span>
+            <span id="dd-refac-badge"></span>
+            <span class="arrow-d">▼</span>
+          </button>
+          <div class="dropdown-content" id="dd-refac-content"></div>
+        </div>
+      </div>
+      <div class="filtro-group">
+        <label>ALMACÉN</label>
+        <div class="dropdown" id="dd-alm">
+          <button class="dropdown-btn" onclick="toggleDropdown('dd-alm')">
+            <span id="dd-alm-label">Todos</span>
+            <span id="dd-alm-badge"></span>
+            <span class="arrow-d">▼</span>
+          </button>
+          <div class="dropdown-content" id="dd-alm-content"></div>
+        </div>
+      </div>
+      <div class="filtro-group">
+        <label>TIPO DE MANTENIMIENTO</label>
+        <div class="dropdown" id="dd-tipo">
+          <button class="dropdown-btn" onclick="toggleDropdown('dd-tipo')">
+            <span id="dd-tipo-label">Todos</span>
+            <span id="dd-tipo-badge"></span>
+            <span class="arrow-d">▼</span>
+          </button>
+          <div class="dropdown-content" id="dd-tipo-content"></div>
+        </div>
+      </div>
+      <div class="filtro-group">
+        <label>EXISTENCIA</label>
+        <div class="dropdown" id="dd-exist">
+          <button class="dropdown-btn" onclick="toggleDropdown('dd-exist')">
+            <span id="dd-exist-label">Todos</span>
+            <span id="dd-exist-badge"></span>
+            <span class="arrow-d">▼</span>
+          </button>
+          <div class="dropdown-content" id="dd-exist-content"></div>
+        </div>
+      </div>
+      <div class="filtro-group">
+        <label>CLASIFICACIÓN</label>
+        <div class="dropdown" id="dd-clas">
+          <button class="dropdown-btn" onclick="toggleDropdown('dd-clas')">
+            <span id="dd-clas-label">Todos</span>
+            <span id="dd-clas-badge"></span>
+            <span class="arrow-d">▼</span>
+          </button>
+          <div class="dropdown-content" id="dd-clas-content"></div>
+        </div>
+      </div>
+      <div class="filtro-group">
+        <label>TIPO DE NECESIDAD</label>
+        <div class="dropdown" id="dd-tnec">
+          <button class="dropdown-btn" onclick="toggleDropdown('dd-tnec')">
+            <span id="dd-tnec-label">Todos</span>
+            <span id="dd-tnec-badge"></span>
+            <span class="arrow-d">▼</span>
+          </button>
+          <div class="dropdown-content" id="dd-tnec-content"></div>
+        </div>
+      </div>
+      <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
+    </div>
+
     <!-- ====== PANEL 1: EXISTENCIAS POR TIPO DE MANTENIMIENTO ====== -->
     <div id="dash-1" class="dash-panel active">
-      <!-- FILTROS -->
-      <div class="filtros">
-        <div class="filtro-group">
-          <label>TIPO DE REFACCIÓN</label>
-          <div class="dropdown" id="dd-refac">
-            <button class="dropdown-btn" onclick="toggleDropdown('dd-refac')">
-              <span id="dd-refac-label">Todos</span>
-              <span id="dd-refac-badge"></span>
-              <span class="arrow-d">▼</span>
-            </button>
-            <div class="dropdown-content" id="dd-refac-content"></div>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>ALMACÉN</label>
-          <div class="dropdown" id="dd-alm">
-            <button class="dropdown-btn" onclick="toggleDropdown('dd-alm')">
-              <span id="dd-alm-label">Todos</span>
-              <span id="dd-alm-badge"></span>
-              <span class="arrow-d">▼</span>
-            </button>
-            <div class="dropdown-content" id="dd-alm-content"></div>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>TIPO DE MANTENIMIENTO</label>
-          <div class="dropdown" id="dd-tipo">
-            <button class="dropdown-btn" onclick="toggleDropdown('dd-tipo')">
-              <span id="dd-tipo-label">Todos</span>
-              <span id="dd-tipo-badge"></span>
-              <span class="arrow-d">▼</span>
-            </button>
-            <div class="dropdown-content" id="dd-tipo-content"></div>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>EXISTENCIA</label>
-          <div class="dropdown" id="dd-exist">
-            <button class="dropdown-btn" onclick="toggleDropdown('dd-exist')">
-              <span id="dd-exist-label">Todos</span>
-              <span id="dd-exist-badge"></span>
-              <span class="arrow-d">▼</span>
-            </button>
-            <div class="dropdown-content" id="dd-exist-content"></div>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>CLASIFICACIÓN</label>
-          <div class="dropdown" id="dd-clas">
-            <button class="dropdown-btn" onclick="toggleDropdown('dd-clas')">
-              <span id="dd-clas-label">Todos</span>
-              <span id="dd-clas-badge"></span>
-              <span class="arrow-d">▼</span>
-            </button>
-            <div class="dropdown-content" id="dd-clas-content"></div>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>TIPO DE NECESIDAD</label>
-          <div class="dropdown" id="dd-tnec">
-            <button class="dropdown-btn" onclick="toggleDropdown('dd-tnec')">
-              <span id="dd-tnec-label">Todos</span>
-              <span id="dd-tnec-badge"></span>
-              <span class="arrow-d">▼</span>
-            </button>
-            <div class="dropdown-content" id="dd-tnec-content"></div>
-          </div>
-        </div>
-        <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
-      </div>
 
       <!-- KPIs -->
       <div class="kpi-row">
@@ -587,30 +592,6 @@
 
     <!-- ====== PANEL 2: EXISTENCIAS POR ALMACÉN ====== -->
     <div id="dash-2" class="dash-panel">
-      <div class="filtros">
-        <div class="filtro-group">
-          <label>ALMACÉN</label>
-          <div class="dropdown" id="dd-alm-2">
-            <button class="dropdown-btn" onclick="mirrorDropdown('dd-alm','dd-alm-2')">
-              <span id="dd-alm-2-label">Todos</span>
-              <span class="arrow-d">▼</span>
-            </button>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>TIPO DE MANTENIMIENTO</label>
-          <div class="dropdown" id="dd-tipo-2">
-            <button class="dropdown-btn" onclick="mirrorDropdown('dd-tipo','dd-tipo-2')">
-              <span id="dd-tipo-2-label">Todos</span>
-              <span class="arrow-d">▼</span>
-            </button>
-          </div>
-        </div>
-        <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
-        <div style="flex:1;text-align:right;font-size:10px;color:#888;align-self:center">
-          Los filtros se sincronizan entre pestañas
-        </div>
-      </div>
 
       <div class="kpi-row">
         <div class="kpi-card">
@@ -667,30 +648,6 @@
 
     <!-- ====== PANEL 3: DÍAS DE INVENTARIO POR ALMACÉN ====== -->
     <div id="dash-3" class="dash-panel">
-      <div class="filtros">
-        <div class="filtro-group">
-          <label>ALMACÉN</label>
-          <div class="dropdown" id="dd-alm-3">
-            <button class="dropdown-btn" onclick="mirrorDropdown('dd-alm','dd-alm-3')">
-              <span id="dd-alm-3-label">Todos</span>
-              <span class="arrow-d">▼</span>
-            </button>
-          </div>
-        </div>
-        <div class="filtro-group">
-          <label>TIPO DE MANTENIMIENTO</label>
-          <div class="dropdown" id="dd-tipo-3">
-            <button class="dropdown-btn" onclick="mirrorDropdown('dd-tipo','dd-tipo-3')">
-              <span id="dd-tipo-3-label">Todos</span>
-              <span class="arrow-d">▼</span>
-            </button>
-          </div>
-        </div>
-        <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
-        <div style="flex:1;text-align:right;font-size:10px;color:#888;align-self:center">
-          Días = promedio ponderado por existencia
-        </div>
-      </div>
 
       <div class="kpi-row">
         <div class="kpi-card">
@@ -991,14 +948,7 @@ function toggleDropdown(id) {
   }
 }
 
-// Sincroniza dropdowns "espejo" (pestañas 2 y 3 abren los mismos del panel 1)
-function mirrorDropdown(originId, mirrorId) {
-  // Abrir el dropdown del filtro principal cambiando a pestaña 1 momentáneamente NO,
-  // mejor: replicar el contenido en el espejo
-  // Solución simple: cambiar a panel 1 y abrir el dropdown allí
-  changeDash(1);
-  setTimeout(() => toggleDropdown(originId), 50);
-}
+
 
 function limpiarFiltros() {
   ['refac','alm','tipo','exist','clas','tnec'].forEach(k => {
