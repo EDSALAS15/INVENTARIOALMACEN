@@ -1,1208 +1,1364 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inventario de Refacciones Citi</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<style>
-:root{
-  --bg:#f5f4f0;--surf:#fff;--surf2:#f0ede6;--bord:rgba(0,0,0,.09);--bord2:rgba(0,0,0,.16);
-  --tx:#1a1a18;--tx2:#5f5e5a;--tx3:#999891;
-  --blue:#185fa5;--blue-bg:#e6f1fb;--blue-tx:#0c447c;
-  --green:#2d6a0f;--green-bg:#e8f5dd;--green-tx:#1e4d09;
-  --red:#a32d2d;--red-bg:#fce8e8;--red-tx:#7a1e1e;
-  --amber:#7a4800;--amber-bg:#fef0d0;--amber-tx:#5a3400;
-  --teal:#0a6650;--teal-bg:#dff4ed;--teal-tx:#064d3b;
-  --purple:#4a3fb0;--purple-bg:#eeedfd;--purple-tx:#332d85;
-  --gray-bg:#ebebeb;--gray-tx:#444;
-  --r:10px;--rlg:14px;
-}
-@media(prefers-color-scheme:dark){:root{
-  --bg:#1c1c1a;--surf:#272724;--surf2:#303030;--bord:rgba(255,255,255,.08);--bord2:rgba(255,255,255,.15);
-  --tx:#f0ede6;--tx2:#b0ada6;--tx3:#777570;
-  --blue:#4da3e8;--blue-bg:#0c3a6a;--blue-tx:#a8d4f5;
-  --green:#7ac44a;--green-bg:#1a3d08;--green-tx:#b0e080;
-  --red:#e87070;--red-bg:#5a1818;--red-tx:#f5b0b0;
-  --amber:#f0b030;--amber-bg:#4a2c00;--amber-tx:#f8d080;
-  --teal:#3ecfa0;--teal-bg:#043d2e;--teal-tx:#80e8c8;
-  --purple:#9090f0;--purple-bg:#28246a;--purple-tx:#c0c0f8;
-  --gray-bg:#3a3a38;--gray-tx:#c0bdb8;
-}}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);font-size:14px;line-height:1.5;}
-.topbar{background:var(--surf);border-bottom:.5px solid var(--bord2);padding:13px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
-.topbar h1{font-size:16px;font-weight:600;letter-spacing:-.2px;}
-.topbar-right{display:flex;align-items:center;gap:14px;}
-#active-filter{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--blue-bg);color:var(--blue-tx);border:.5px solid var(--blue);display:none;cursor:pointer;white-space:nowrap;}
-#active-filter:hover{opacity:.8;}
-.ts{font-size:11px;color:var(--tx3);}
-
-.layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 48px);}
-.sidebar{background:var(--surf);border-right:.5px solid var(--bord);padding:16px 13px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;}
-.sidebar h2{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--tx3);}
-.fcard{background:var(--surf2);border:.5px solid var(--bord);border-radius:var(--r);padding:10px 12px;}
-.fcard .fn{font-size:12px;font-weight:600;margin-bottom:2px;}
-.fcard .fd{font-size:11px;color:var(--tx3);margin-bottom:7px;}
-.fstatus{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--tx2);margin-bottom:8px;}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--bord2);flex-shrink:0;}
-.dot.ok{background:#2d6a0f;}
-.ubtn{display:block;width:100%;padding:5px 0;font-size:12px;font-weight:500;color:var(--blue);background:var(--blue-bg);border:.5px solid var(--blue);border-radius:6px;cursor:pointer;text-align:center;transition:opacity .15s;}
-.ubtn:hover{opacity:.75;}
-input[type=file]{display:none;}
-.filters{display:flex;flex-direction:column;gap:4px;}
-.flabel{font-size:11px;color:var(--tx2);margin-bottom:2px;}
-select,input[type=text]{width:100%;padding:5px 8px;font-size:12px;border:.5px solid var(--bord2);border-radius:6px;background:var(--surf);color:var(--tx);outline:none;}
-select:focus,input[type=text]:focus{border-color:var(--blue);}
-
-.main{padding:18px;display:flex;flex-direction:column;gap:16px;overflow:auto;}
-.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;}
-.kpi{background:var(--surf);border:.5px solid var(--bord);border-radius:var(--r);padding:12px 14px;transition:border-color .2s;}
-.kpi.sc{border-left:3px solid var(--amber);background:var(--amber-bg);}
-.kpi.hi{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-bg);}
-.kpi-lbl{font-size:11px;color:var(--tx3);margin-bottom:4px;}
-.kpi.sc .kpi-lbl{color:var(--amber-tx);}
-.kpi-val{font-size:20px;font-weight:600;}
-.kpi.sc .kpi-val{color:var(--amber-tx);}
-.kpi-sub{font-size:11px;color:var(--tx2);margin-top:2px;}
-.kpi.sc .kpi-sub{color:var(--amber-tx);opacity:.7;}
-
-.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-.card{background:var(--surf);border:.5px solid var(--bord);border-radius:var(--rlg);padding:15px 17px;transition:border-color .2s;}
-.card-ttl{font-size:13px;font-weight:600;margin-bottom:2px;}
-.card-hint{font-size:10px;color:var(--tx3);margin-bottom:12px;}
-.card.has-sel{border-color:var(--blue);}
-
-/* SVG bar interactivo */
-.bar-group{cursor:pointer;transition:opacity .15s;}
-.bar-group:hover .bar-rect{filter:brightness(1.12);}
-.bar-group.dimmed{opacity:.28;}
-.bar-group.selected .bar-rect{stroke-width:1.5;}
-.bar-group.selected .bar-label{font-weight:700;}
-
-.tcard{background:var(--surf);border:.5px solid var(--bord);border-radius:var(--rlg);overflow:hidden;transition:border-color .2s;}
-.tcard.has-sel{border-color:var(--blue);}
-.thead-row{padding:12px 17px;border-bottom:.5px solid var(--bord);display:flex;align-items:center;justify-content:space-between;gap:12px;}
-.tabs{display:flex;gap:2px;border-bottom:.5px solid var(--bord);}
-.tab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--tx2);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;}
-.tab:hover{color:var(--tx);}
-.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
-.tc{display:none;}.tc.active{display:block;}
-.tscroll{max-height:380px;overflow:auto;}
-table{width:100%;border-collapse:collapse;font-size:12px;}
-thead th{padding:7px 13px;text-align:left;font-size:11px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.3px;border-bottom:.5px solid var(--bord);background:var(--surf2);white-space:nowrap;position:sticky;top:0;z-index:1;}
-tbody tr{border-bottom:.5px solid var(--bord);transition:background .1s;}
-tbody tr:hover{background:var(--surf2);}
-tbody tr.dimmed-row{opacity:.35;}
-tbody td{padding:7px 13px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}
-.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:500;}
-.b-blue{background:var(--blue-bg);color:var(--blue-tx);}
-.b-green{background:var(--green-bg);color:var(--green-tx);}
-.b-red{background:var(--red-bg);color:var(--red-tx);}
-.b-amber{background:var(--amber-bg);color:var(--amber-tx);}
-.b-teal{background:var(--teal-bg);color:var(--teal-tx);}
-.b-purple{background:var(--purple-bg);color:var(--purple-tx);}
-.b-gray{background:var(--gray-bg);color:var(--gray-tx);}
-.prog{display:flex;align-items:center;gap:7px;}
-.prog-bar{flex:1;height:5px;background:var(--surf2);border-radius:3px;overflow:hidden;min-width:50px;}
-.prog-fill{height:100%;border-radius:3px;}
-.prog-val{font-size:11px;color:var(--tx2);min-width:28px;text-align:right;}
-.empty{text-align:center;padding:60px 20px;color:var(--tx3);}
-.empty .ico{font-size:38px;margin-bottom:10px;}
-.refac-btn{padding:6px 4px;font-size:11px;font-weight:600;text-align:center;border-radius:6px;cursor:pointer;border:.5px solid var(--bord2);background:var(--surf2);color:var(--tx2);transition:all .15s;user-select:none;}
-.refac-btn:hover{border-color:var(--blue);color:var(--blue);}
-.refac-btn.active{background:var(--blue-bg);color:var(--blue-tx);border-color:var(--blue);font-weight:700;}
-
-/* Filas seleccionables en tabla */
-tbody tr.row-selected{background:var(--blue-bg)!important;outline:.5px solid var(--blue);}
-tbody tr.row-dimmed{opacity:.3;}
-tbody tr.row-selected td{color:var(--blue-tx);}
-
-/* Filtros colapsables con checkboxes */
-/* Cabecera del filtro (toggle) */
-.f-hdr{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:4px 2px;user-select:none;border-radius:4px;}
-.f-hdr:hover{background:var(--surf2);}
-.f-hdr-lbl{font-size:11px;font-weight:600;color:var(--tx2);}
-.f-hdr-right{display:flex;align-items:center;gap:5px;}
-.f-hdr-badge{font-size:10px;font-weight:700;color:var(--blue-tx);background:var(--blue-bg);padding:1px 6px;border-radius:10px;display:none;}
-.f-hdr-arr{font-size:9px;color:var(--tx3);transition:transform .2s;}
-.f-hdr-arr.open{transform:rotate(180deg);}
-/* Cuerpo colapsable */
-.f-body{display:none;margin-top:4px;}
-.f-body.open{display:block;}
-/* Caja de opciones */
-.ms-box{background:var(--surf2);border:.5px solid var(--bord);border-radius:6px;overflow:hidden;}
-/* buscadores eliminados */
-.ms-options{max-height:140px;overflow-y:auto;}
-.ms-opt{display:flex;align-items:center;gap:7px;padding:4px 8px;font-size:11px;cursor:pointer;transition:background .1s;}
-.ms-opt:hover{background:var(--surf);}
-.ms-opt.ms-opt-all{border-bottom:.5px solid var(--bord);font-weight:600;}
-.ms-opt input[type=checkbox]{width:12px;height:12px;accent-color:var(--blue);cursor:pointer;flex-shrink:0;margin:0;}
-.ms-opt label{cursor:pointer;color:var(--tx);flex:1;line-height:1.3;}
-.ms-opt.ms-opt-all label{color:var(--blue-tx);}
-.ms-badge{display:inline-block;background:var(--blue-bg);color:var(--blue-tx);font-size:10px;font-weight:600;padding:1px 5px;border-radius:10px;margin-left:4px;}
-/* Botón limpiar filtros */
-.btn-clear-filters{width:100%;padding:5px 0;font-size:11px;font-weight:600;color:var(--red-tx);background:var(--red-bg);border:.5px solid var(--red);border-radius:6px;cursor:pointer;text-align:center;transition:opacity .15s;margin-bottom:4px;}
-.btn-clear-filters:hover{opacity:.8;}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario de Refacciones - Senda Citi</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <style>
+    /* ============================================================
+       VARIABLES CORPORATIVAS SENDA CITI
+    ============================================================ */
+    :root {
+      --rojo:      #E4002B;
+      --gris:      #F4F4F4;
+      --side-w:    220px;
+      --side-bg:   #333F48;
+      --side-grp:  #263038;
+      --side-txt:  #ccc;
+      --azul:      #0070C0;
+      --rojo-graf: #880015;
+      --verde:     #00B050;
+      --naranja:   #FFC000;
+      --verde-exc: #227447;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      font-size: 12px;
+      background: var(--gris);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    /* HEADER */
+    .header-bar {
+      display: flex;
+      height: 52px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .header-logo {
+      background: #fefefe;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      width: var(--side-w);
+    }
+    .header-logo img { height: 42px; width: auto; }
+    .header-title {
+      background: var(--rojo);
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+    }
+    .header-title h2 {
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+    .header-status {
+      color: rgba(255,255,255,.9);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .3px;
+    }
+    /* LAYOUT */
+    .app-body { display: flex; flex: 1; overflow: hidden; }
+    .sidebar {
+      width: var(--side-w);
+      background: var(--side-bg);
+      overflow-y: auto;
+      flex-shrink: 0;
+      min-height: calc(100vh - 52px);
+    }
+    .nav-group { border-bottom: 1px solid rgba(255,255,255,.07); }
+    .nav-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 13px 16px;
+      background: var(--side-grp);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .nav-group-header:hover { background: #3a4a55; }
+    .nav-children { display: none; padding-bottom: 4px; }
+    .nav-children.open { display: block; }
+    .arrow { transition: transform .2s; font-size: 9px; }
+    .nav-group-header.open .arrow { transform: rotate(90deg); }
+    .tab-btn {
+      display: block;
+      width: 100%;
+      background: none;
+      border: none;
+      border-left: 3px solid transparent;
+      color: var(--side-txt);
+      font-size: 10.5px;
+      font-weight: 600;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      padding: 10px 16px 10px 22px;
+      text-align: left;
+      cursor: pointer;
+      line-height: 1.4;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .tab-btn:hover { background: rgba(255,255,255,.06); color: #fff; }
+    .tab-btn.active {
+      background: rgba(255,255,255,.1);
+      color: #fff;
+      border-left-color: var(--rojo);
+    }
+    /* MAIN */
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px;
+    }
+    .dash-panel { display: none; }
+    .dash-panel.active { display: block; }
+    /* FILTROS */
+    .filtros {
+      background: #f9f9f9;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .filtro-group { display: flex; flex-direction: column; gap: 4px; }
+    .filtro-group label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: #888;
+    }
+    .dropdown { position: relative; }
+    .dropdown-btn {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      color: #333;
+      cursor: pointer;
+      min-width: 130px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .dropdown-btn:hover { border-color: var(--rojo); }
+    .dropdown-btn .arrow-d { font-size: 8px; color: #999; }
+    .dropdown-btn .badge {
+      display: inline-block;
+      background: var(--rojo);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 8px;
+      min-width: 16px;
+      text-align: center;
+    }
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+      z-index: 200;
+      min-width: 200px;
+      max-height: 260px;
+      overflow-y: auto;
+      margin-top: 2px;
+    }
+    .dropdown-content.open { display: block; }
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .dropdown-item:hover { background: #f4f4f4; }
+    .dropdown-item.all-item {
+      border-bottom: 1px solid #eee;
+      font-weight: 700;
+      color: var(--azul);
+    }
+    .dropdown-item input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: var(--rojo);
+      width: 13px;
+      height: 13px;
+    }
+    .btn-clear {
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 5px 14px;
+      font-size: 11px;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      color: #666;
+      cursor: pointer;
+      transition: all .15s;
+      height: 28px;
+    }
+    .btn-clear:hover {
+      border-color: var(--rojo);
+      color: var(--rojo);
+      background: rgba(228,0,43,.04);
+    }
+    /* KPI */
+    .kpi-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .kpi-card {
+      flex: 1;
+      background: #F9F9F9;
+      border: 1px solid #e8e8e8;
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      min-height: 90px;
+      text-align: center;
+    }
+    .kpi-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: #999;
+      width: 100%;
+    }
+    .kpi-value {
+      font-size: 22px;
+      font-weight: 800;
+      color: #333F48;
+      line-height: 1;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .kpi-sub {
+      font-size: 10px;
+      color: #888;
+      text-align: center;
+      width: 100%;
+    }
+    /* CHART TITLE */
+    .chart-title {
+      color: #333;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      padding-left: 2px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .ct-dash, .ct-zone, .ct-info {
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 20px;
+      padding: 2px 10px;
+      white-space: nowrap;
+    }
+    .ct-dash { background: #333F48; color: #fff; }
+    .ct-zone { background: var(--rojo); color: #fff; }
+    .ct-info { background: #4A4847; color: #fff; }
+    /* CHART WRAP */
+    .chart-wrap {
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #e8e8e8;
+      padding: 14px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .chart-canvas-wrap {
+      position: relative;
+      height: 340px;
+    }
+    /* TABLA */
+    .tabla-wrap {
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #e8e8e8;
+      overflow: hidden;
+      margin-top: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    .tabla-toolbar {
+      background: #333F48;
+      color: #fff;
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-dl {
+      background: var(--verde-exc);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-dl:hover { background: #19593a; }
+    .tabla-container { overflow-x: auto; max-height: 380px; overflow-y: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th {
+      background: #333F48;
+      color: #fff;
+      padding: 6px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    td {
+      padding: 5px 10px;
+      text-align: center;
+      color: #2c2c2c;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    td.label-col {
+      text-align: left;
+      font-weight: 600;
+      font-size: 10px;
+      color: #333F48;
+      white-space: nowrap;
+    }
+    tr:nth-child(even) td { background: #f9fafb; }
+    tr:hover td { background: #edf3ff; }
+    /* OVERLAY */
+    #overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(51,63,72,.6);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #overlay.show { display: flex; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 5px solid #fff;
+      border-top-color: var(--rojo);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    .overlay-text {
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* SCROLLBARS */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #f0f0f0; }
+    ::-webkit-scrollbar-thumb { background: #bbb; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--side-bg); }
+  </style>
 </head>
 <body>
 
-<div class="topbar">
-  <h1>Inventario de Refacciones Citi</h1>
-  <div class="topbar-right">
-    <div id="active-filter" onclick="clearBISelection()">✕ Limpiar selección</div>
-    <span class="ts" id="ts">Sin datos cargados</span>
+<!-- OVERLAY -->
+<div id="overlay">
+  <div class="spinner"></div>
+  <div class="overlay-text">ACTUALIZANDO</div>
+</div>
+
+<!-- HEADER -->
+<div class="header-bar">
+  <div class="header-logo">
+    <img src="data:image/png;base64,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QZcSew5V0kVqrRVXc9BoHEVfRJTlRhGXNjOc93hhooW/Z1rhj+B2lrrxf5dy51Jsl2iVRb6PSte0Hte0MHzIV5kVj1OPieol6Sr1r2aMV9fyRRu26DumitO15vlNHBX1k4PC14cRG0cgSPEuKldEWVCChHlR4TUb+rqNzO5rfql4beAREUjCOt1OLgdOXIWmMSXA0sgpmlwaDJwnh5nq54VLq/ZHtFpZH8elq14H1osPHyKvGis1aCq4yz0ugcT3GiRnGjCMubGc5z0+DKFjZ3rgv4Bpa68X+Xd/RdlRbINo1W9rWaXrIwfrS8LAPiVeJFZVnHxPRT9JV617NGK+r/dGi7C9JVWjNnlLargxsdc+WSepa1wcA5xwBkf4Q1b0iLLjFRWEeBvLqpeV53FT9Um2/mERFUxgiIgCIiAIiIDKLGUygMosZTKAFERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAf/9k=" alt="Senda Citi">
+  </div>
+  <div class="header-title">
+    <h2>Inventario de Refacciones</h2>
+    <div class="header-status" id="hdr-status">—</div>
   </div>
 </div>
 
-<div class="layout">
-<aside class="sidebar">
-  <div><h2>Archivos de Datos</h2></div>
+<!-- BODY -->
+<div class="app-body">
 
-  <div class="fcard">
-    <div class="fn">InventarioAlmacen.xlsx</div>
-    <div class="fd">Existencias por almacén</div>
-    <div class="fstatus"><div class="dot" id="dot-inv"></div><span id="st-inv">Sin cargar</span></div>
-    <label class="ubtn" for="f-inv"><span id="btn-inv">Cargar archivo</span></label>
-    <input type="file" id="f-inv" accept=".xls,.xlsx,.csv">
-    <button onclick="resetStorage()" id="btn-reset"
-      style="display:none;width:100%;margin-top:6px;padding:5px 0;font-size:11px;color:var(--red-tx);background:var(--red-bg);border:.5px solid var(--red);border-radius:6px;cursor:pointer;">
-      Limpiar memoria
-    </button>
-  </div>
-  <div>
-    <h2>Filtros globales</h2>
-    <div class="filters">
-      <button class="btn-clear-filters" onclick="clearAllFilters()">↺ Limpiar Filtros</button>
-      <div>
-        <div class="flabel">Tipo de Refacción</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px;">
-          <div id="btn-prev" class="refac-btn active" onclick="setRefac('prev')">🔧 Preventivos</div>
-          <div id="btn-corr" class="refac-btn" onclick="setRefac('corr')">🔩 Correctivos</div>
-        </div>
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="nav-group" id="group-1">
+      <div class="nav-group-header open" onclick="toggleGroup('group-1')">
+        <span>INVENTARIO</span><span class="arrow">&#9654;</span>
       </div>
-      <!-- Almacén -->
-      <div>
-        <div class="f-hdr" onclick="fToggle('alm')">
-          <span class="f-hdr-lbl">Almacén</span>
-          <div class="f-hdr-right">
-            <span class="f-hdr-badge" id="f-badge-alm"></span>
-            <span class="f-hdr-arr" id="f-arr-alm">▼</span>
+      <div class="nav-children open" id="children-group-1">
+        <button id="t1" class="tab-btn active" onclick="changeDash(1)">Existencias por Tipo de Mantenimiento</button>
+        <button id="t2" class="tab-btn" onclick="changeDash(2)">Existencias por Almacén</button>
+        <button id="t3" class="tab-btn" onclick="changeDash(3)">Días de Inventario por Almacén</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- ====== PANEL 1: EXISTENCIAS POR TIPO DE MANTENIMIENTO ====== -->
+    <div id="dash-1" class="dash-panel active">
+      <!-- FILTROS -->
+      <div class="filtros">
+        <div class="filtro-group">
+          <label>ALMACÉN</label>
+          <div class="dropdown" id="dd-alm">
+            <button class="dropdown-btn" onclick="toggleDropdown('dd-alm')">
+              <span id="dd-alm-label">Todos</span>
+              <span id="dd-alm-badge"></span>
+              <span class="arrow-d">▼</span>
+            </button>
+            <div class="dropdown-content" id="dd-alm-content"></div>
           </div>
         </div>
-        <div class="f-body" id="f-body-alm">
-          <div class="ms-box"><div class="ms-options" id="ms-alm-options"></div></div>
-        </div>
-      </div>
-      <!-- Tipo de Mantenimiento (checkbox MS) -->
-      <div id="wrap-tipo">
-        <div class="f-hdr" onclick="fToggle('tipo')">
-          <span class="f-hdr-lbl">Tipo de Mantenimiento</span>
-          <div class="f-hdr-right">
-            <span class="f-hdr-badge" id="f-badge-tipo"></span>
-            <span class="f-hdr-arr" id="f-arr-tipo">▼</span>
+        <div class="filtro-group">
+          <label>TIPO DE MANTENIMIENTO</label>
+          <div class="dropdown" id="dd-tipo">
+            <button class="dropdown-btn" onclick="toggleDropdown('dd-tipo')">
+              <span id="dd-tipo-label">Todos</span>
+              <span id="dd-tipo-badge"></span>
+              <span class="arrow-d">▼</span>
+            </button>
+            <div class="dropdown-content" id="dd-tipo-content"></div>
           </div>
         </div>
-        <div class="f-body" id="f-body-tipo">
-          <div class="ms-box"><div class="ms-options" id="ms-tipo-options"></div></div>
-        </div>
-      </div>
-      <!-- Familia (modo correctivos, checkbox MS) -->
-      <div id="wrap-familia" style="display:none">
-        <div class="f-hdr" onclick="fToggle('fam')">
-          <span class="f-hdr-lbl"><span id="lbl-familia">Familia</span></span>
-          <div class="f-hdr-right">
-            <span class="f-hdr-badge" id="f-badge-fam"></span>
-            <span class="f-hdr-arr" id="f-arr-fam">▼</span>
+        <div class="filtro-group">
+          <label>EXISTENCIA</label>
+          <div class="dropdown" id="dd-exist">
+            <button class="dropdown-btn" onclick="toggleDropdown('dd-exist')">
+              <span id="dd-exist-label">Todos</span>
+              <span id="dd-exist-badge"></span>
+              <span class="arrow-d">▼</span>
+            </button>
+            <div class="dropdown-content" id="dd-exist-content"></div>
           </div>
         </div>
-        <div class="f-body" id="f-body-fam">
-          <div class="ms-box"><div class="ms-options" id="ms-fam-options"></div></div>
-        </div>
-      </div>
-      <!-- Existencia (checkbox MS) -->
-      <div>
-        <div class="f-hdr" onclick="fToggle('exist')">
-          <span class="f-hdr-lbl">Existencia</span>
-          <div class="f-hdr-right">
-            <span class="f-hdr-badge" id="f-badge-exist"></span>
-            <span class="f-hdr-arr" id="f-arr-exist">▼</span>
+        <div class="filtro-group">
+          <label>CLASIFICACIÓN</label>
+          <div class="dropdown" id="dd-clas">
+            <button class="dropdown-btn" onclick="toggleDropdown('dd-clas')">
+              <span id="dd-clas-label">Todos</span>
+              <span id="dd-clas-badge"></span>
+              <span class="arrow-d">▼</span>
+            </button>
+            <div class="dropdown-content" id="dd-clas-content"></div>
           </div>
         </div>
-        <div class="f-body" id="f-body-exist">
-          <div class="ms-box"><div class="ms-options" id="ms-exist-options"></div></div>
-        </div>
-      </div>
-      <!-- Clasificación -->
-      <div>
-        <div class="f-hdr" onclick="fToggle('clas')">
-          <span class="f-hdr-lbl">Clasificación</span>
-          <div class="f-hdr-right">
-            <span class="f-hdr-badge" id="f-badge-clas"></span>
-            <span class="f-hdr-arr" id="f-arr-clas">▼</span>
+        <div class="filtro-group">
+          <label>TIPO DE NECESIDAD</label>
+          <div class="dropdown" id="dd-tnec">
+            <button class="dropdown-btn" onclick="toggleDropdown('dd-tnec')">
+              <span id="dd-tnec-label">Todos</span>
+              <span id="dd-tnec-badge"></span>
+              <span class="arrow-d">▼</span>
+            </button>
+            <div class="dropdown-content" id="dd-tnec-content"></div>
           </div>
         </div>
-        <div class="f-body" id="f-body-clas">
-          <div class="ms-box"><div class="ms-options" id="ms-clas-options"></div></div>
+        <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Materiales</div>
+          <div class="kpi-value" id="kpi-tot">—</div>
+          <div class="kpi-sub" id="kpi-tot-sub">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Existencias Totales</div>
+          <div class="kpi-value" id="kpi-exist">—</div>
+          <div class="kpi-sub">piezas</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Con Existencia</div>
+          <div class="kpi-value" id="kpi-con" style="color:var(--verde-exc)">—</div>
+          <div class="kpi-sub" id="kpi-con-sub">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Sin Existencia</div>
+          <div class="kpi-value" id="kpi-sin" style="color:var(--rojo)">—</div>
+          <div class="kpi-sub" id="kpi-sin-sub">—</div>
         </div>
       </div>
-      <!-- Tipo de Necesidad -->
-      <div>
-        <div class="f-hdr" onclick="fToggle('tnec')">
-          <span class="f-hdr-lbl">Tipo de Necesidad</span>
-          <div class="f-hdr-right">
-            <span class="f-hdr-badge" id="f-badge-tnec"></span>
-            <span class="f-hdr-arr" id="f-arr-tnec">▼</span>
-          </div>
+
+      <!-- GRÁFICA -->
+      <div class="chart-wrap">
+        <div class="chart-title">
+          <span class="ct-dash">INVENTARIO</span>
+          <span class="ct-zone" id="ct-zona-1">TODOS LOS ALMACENES</span>
+          <span class="ct-info">EXISTENCIAS POR TIPO DE MANTENIMIENTO</span>
         </div>
-        <div class="f-body" id="f-body-tnec">
-          <div class="ms-box"><div class="ms-options" id="ms-tnec-options"></div></div>
+        <div class="chart-canvas-wrap"><canvas id="chart-1"></canvas></div>
+      </div>
+
+      <!-- TABLA -->
+      <div class="tabla-wrap">
+        <div class="tabla-toolbar">
+          <span id="tabla-1-title">RESUMEN POR TIPO DE MANTENIMIENTO</span>
+          <button class="btn-dl" onclick="descargarExcel(1)">⬇ Descargar Excel</button>
+        </div>
+        <div class="tabla-container">
+          <table id="tabla-1">
+            <thead>
+              <tr>
+                <th>TIPO DE MANTENIMIENTO</th>
+                <th>MATERIALES</th>
+                <th>CON EXISTENCIA</th>
+                <th>SIN EXISTENCIA</th>
+                <th>% DISPONIBLE</th>
+                <th>EXISTENCIAS TOTALES</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-1"><tr><td colspan="6" style="padding:40px;color:#aaa">Cargando datos...</td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
-  </div>
-</aside>
 
-<main class="main">
-  <div class="empty" id="empty">
-    <div class="ico">📦</div>
-    <p>Carga los dos archivos para visualizar el inventario</p>
-    <small style="font-size:11px;color:var(--tx3)">Codigos_MP + InventarioAlmacen</small>
-  </div>
-
-  <div id="dash" style="display:none;flex-direction:column;gap:16px;">
-
-    <div class="kpis">
-      <div class="kpi" id="kpi-mat"><div class="kpi-lbl" id="k-mat-lbl">Materiales preventivos</div><div class="kpi-val" id="k-mat">—</div><div class="kpi-sub" id="k-tipos-sub"></div></div>
-      <div class="kpi"><div class="kpi-lbl">Existencias totales</div><div class="kpi-val" id="k-exist" style="color:var(--blue)">—</div><div class="kpi-sub" id="k-exist-sub">Piezas</div></div>
-      <div class="kpi"><div class="kpi-lbl">Con existencia</div><div class="kpi-val" id="k-con" style="color:var(--green)">—</div><div class="kpi-sub" id="k-con-p"></div></div>
-      <div class="kpi"><div class="kpi-lbl">Sin existencia</div><div class="kpi-val" id="k-sin" style="color:var(--red)">—</div><div class="kpi-sub" id="k-sin-p"></div></div>
-      <div class="kpi sc"><div class="kpi-lbl" id="k-sc-lbl">Correctivos</div><div class="kpi-val" id="k-sc">—</div><div class="kpi-sub" id="k-sc-exist"></div></div>
-      <div class="kpi"><div class="kpi-lbl">Días de Inventario</div><div class="kpi-val" id="k-dias" style="color:var(--teal)">—</div><div class="kpi-sub" id="k-dias-sub">Promedio ponderado</div></div>
-    </div>
-
-    <!-- Layout: izquierda = Tipos | derecha = Existencias (arriba) + Días (abajo) -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
-      <!-- Col izquierda: Tipos de Mantenimiento -->
-      <div class="card" id="card-tipos">
-        <div class="card-ttl" id="ttl-chart-tipos">Existencias por Tipo de Mantenimiento</div>
-        <div class="card-hint">Haz clic en una barra para filtrar</div>
-        <div id="chart-tipos"></div>
-      </div>
-      <!-- Col derecha: Existencias por Almacén + Días de Inventario -->
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        <div class="card" id="card-alm">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
-            <div class="card-ttl" style="margin:0">Existencias por Almacén</div>
-            <button onclick="exportAlmacenExcel()" id="btn-export-alm"
-              style="font-size:11px;font-weight:500;padding:4px 10px;border:.5px solid var(--green);border-radius:6px;background:var(--green-bg);color:var(--green-tx);cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
-                <path d="M6 1v7M3 5.5l3 3 3-3M1 9.5v1a.5.5 0 00.5.5h9a.5.5 0 00.5-.5v-1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Exportar Excel
+    <!-- ====== PANEL 2: EXISTENCIAS POR ALMACÉN ====== -->
+    <div id="dash-2" class="dash-panel">
+      <div class="filtros">
+        <div class="filtro-group">
+          <label>ALMACÉN</label>
+          <div class="dropdown" id="dd-alm-2">
+            <button class="dropdown-btn" onclick="mirrorDropdown('dd-alm','dd-alm-2')">
+              <span id="dd-alm-2-label">Todos</span>
+              <span class="arrow-d">▼</span>
             </button>
           </div>
-          <div class="card-hint">Haz clic en una barra para filtrar</div>
-          <div id="chart-alm"></div>
         </div>
-        <div class="card" id="card-dias-alm">
-          <div class="card-ttl">Días de Inventario por Almacén</div>
-          <div class="card-hint">Existencias ÷ Consumo Diario</div>
-          <div id="chart-dias-alm"></div>
+        <div class="filtro-group">
+          <label>TIPO DE MANTENIMIENTO</label>
+          <div class="dropdown" id="dd-tipo-2">
+            <button class="dropdown-btn" onclick="mirrorDropdown('dd-tipo','dd-tipo-2')">
+              <span id="dd-tipo-2-label">Todos</span>
+              <span class="arrow-d">▼</span>
+            </button>
+          </div>
+        </div>
+        <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
+        <div style="flex:1;text-align:right;font-size:10px;color:#888;align-self:center">
+          Los filtros se sincronizan entre pestañas
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Almacenes</div>
+          <div class="kpi-value" id="kpi-alm-count">—</div>
+          <div class="kpi-sub">con inventario</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Existencias Totales</div>
+          <div class="kpi-value" id="kpi-alm-exist">—</div>
+          <div class="kpi-sub">piezas</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Promedio por Almacén</div>
+          <div class="kpi-value" id="kpi-alm-prom">—</div>
+          <div class="kpi-sub">piezas</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Almacén Mayor</div>
+          <div class="kpi-value" id="kpi-alm-max" style="font-size:14px">—</div>
+          <div class="kpi-sub" id="kpi-alm-max-val">—</div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">
+          <span class="ct-dash">INVENTARIO</span>
+          <span class="ct-zone" id="ct-zona-2">TODOS LOS TIPOS</span>
+          <span class="ct-info">EXISTENCIAS POR ALMACÉN</span>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="chart-2"></canvas></div>
+      </div>
+
+      <div class="tabla-wrap">
+        <div class="tabla-toolbar">
+          <span>DETALLE POR ALMACÉN</span>
+          <button class="btn-dl" onclick="descargarExcel(2)">⬇ Descargar Excel</button>
+        </div>
+        <div class="tabla-container">
+          <table id="tabla-2">
+            <thead>
+              <tr>
+                <th>ALMACÉN</th>
+                <th>MATERIALES</th>
+                <th>EXISTENCIAS</th>
+                <th>% DEL TOTAL</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-2"><tr><td colspan="4" style="padding:40px;color:#aaa">Cargando datos...</td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <div class="tcard" id="tcard">
-      <div class="thead-row">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="card-ttl" style="margin:0">Detalle de Inventario</div>
-          <span id="table-count" style="font-size:11px;color:var(--tx3)"></span>
+    <!-- ====== PANEL 3: DÍAS DE INVENTARIO POR ALMACÉN ====== -->
+    <div id="dash-3" class="dash-panel">
+      <div class="filtros">
+        <div class="filtro-group">
+          <label>ALMACÉN</label>
+          <div class="dropdown" id="dd-alm-3">
+            <button class="dropdown-btn" onclick="mirrorDropdown('dd-alm','dd-alm-3')">
+              <span id="dd-alm-3-label">Todos</span>
+              <span class="arrow-d">▼</span>
+            </button>
+          </div>
         </div>
-        <input type="text" id="search" placeholder="Buscar código, descripción..." style="width:200px;font-size:12px;">
-      </div>
-      <div class="tabs" style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;">
-          <div class="tab active" data-t="det" onclick="setActiveTab('det')">Por Material</div>
-          <div class="tab" data-t="res" onclick="setActiveTab('res')">Por Tipo Mant.</div>
-          <div class="tab" data-t="alm" onclick="setActiveTab('alm')">Por Almacén</div>
+        <div class="filtro-group">
+          <label>TIPO DE MANTENIMIENTO</label>
+          <div class="dropdown" id="dd-tipo-3">
+            <button class="dropdown-btn" onclick="mirrorDropdown('dd-tipo','dd-tipo-3')">
+              <span id="dd-tipo-3-label">Todos</span>
+              <span class="arrow-d">▼</span>
+            </button>
+          </div>
         </div>
-        <div style="padding:0 14px;">
-          <button id="btn-exp-det" onclick="exportTabla('det')"
-            style="font-size:11px;font-weight:500;padding:4px 10px;border:.5px solid var(--green);border-radius:6px;background:var(--green-bg);color:var(--green-tx);cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5.5l3 3 3-3M1 9.5v1a.5.5 0 00.5.5h9a.5.5 0 00.5-.5v-1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Exportar Excel
-          </button>
+        <button class="btn-clear" onclick="limpiarFiltros()">↺ Limpiar Filtros</button>
+        <div style="flex:1;text-align:right;font-size:10px;color:#888;align-self:center">
+          Días = promedio ponderado por existencia
         </div>
       </div>
-      <div class="tc active tscroll" id="tc-det">
-        <table><thead><tr><th>Código</th><th>Descripción</th><th>Tipo Mantenimiento</th><th>Almacén</th><th>Clasificación</th><th>Tipo Necesidad</th><th style="text-align:right">Existencia</th><th style="text-align:right">Cons. Diario</th><th style="text-align:right">Días Inv.</th></tr></thead>
-        <tbody id="tb-det"></tbody></table>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Promedio General</div>
+          <div class="kpi-value" id="kpi-di-prom">—</div>
+          <div class="kpi-sub">días de inventario</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Máximo</div>
+          <div class="kpi-value" id="kpi-di-max" style="color:var(--rojo)">—</div>
+          <div class="kpi-sub" id="kpi-di-max-alm">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Mínimo</div>
+          <div class="kpi-value" id="kpi-di-min" style="color:var(--verde-exc)">—</div>
+          <div class="kpi-sub" id="kpi-di-min-alm">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Almacenes Evaluados</div>
+          <div class="kpi-value" id="kpi-di-count">—</div>
+          <div class="kpi-sub">con datos disponibles</div>
+        </div>
       </div>
-      <div class="tc tscroll" id="tc-res">
-        <table><thead><tr><th id="th-tipo">Tipo de Mantenimiento</th><th style="text-align:right">Materiales</th><th style="text-align:right">Con Exist.</th><th style="text-align:right">Sin Exist.</th><th>Cobertura</th><th style="text-align:right">Total Exist.</th><th style="text-align:right">Cons. Diario</th><th style="text-align:right">Días Inv.</th></tr></thead>
-        <tbody id="tb-res"></tbody></table>
+
+      <div class="chart-wrap">
+        <div class="chart-title">
+          <span class="ct-dash">INVENTARIO</span>
+          <span class="ct-zone" id="ct-zona-3">TODOS LOS ALMACENES</span>
+          <span class="ct-info">DÍAS DE INVENTARIO POR ALMACÉN</span>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="chart-3"></canvas></div>
       </div>
-      <div class="tc tscroll" id="tc-alm">
-        <table><thead><tr><th>Almacén</th><th>Tipo Mantenimiento</th><th style="text-align:right">Materiales</th><th style="text-align:right">Total Exist.</th><th style="text-align:right">Cons. Diario</th><th style="text-align:right">Días Inv.</th></tr></thead>
-        <tbody id="tb-alm"></tbody></table>
+
+      <div class="tabla-wrap">
+        <div class="tabla-toolbar">
+          <span>DETALLE DE DÍAS DE INVENTARIO POR ALMACÉN</span>
+          <button class="btn-dl" onclick="descargarExcel(3)">⬇ Descargar Excel</button>
+        </div>
+        <div class="tabla-container">
+          <table id="tabla-3">
+            <thead>
+              <tr>
+                <th>ALMACÉN</th>
+                <th>MATERIALES EVALUADOS</th>
+                <th>DÍAS PROMEDIO</th>
+                <th>DÍAS MÍNIMO</th>
+                <th>DÍAS MÁXIMO</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-3"><tr><td colspan="5" style="padding:40px;color:#aaa">Cargando datos...</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-  </div>
-</main>
+  </main>
 </div>
 
 <script>
-// ══ CONSTANTES ══════════════════════════════════════════════
-const K_INV='inv_v10', K_TS='inv_ts_v10';
-const PAL=['#185fa5','#0f6e56','#534ab7','#7a4800','#a32d2d','#2d6a0f','#993556','#555','#1d9e75','#0a6650','#4a3fb0','#ba7517'];
-const TC_LIST=['b-blue','b-teal','b-purple','b-amber','b-red','b-green'];
-const TC_MAP={}; let tci=0;
-function badgeClass(t){if(t==='Sin clasificar'||t==='Correctivo')return 'b-gray';if(!TC_MAP[t])TC_MAP[t]=TC_LIST[tci++%TC_LIST.length];return TC_MAP[t];}
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+const RAW_URL = 'https://raw.githubusercontent.com/EDSALAS15/Inventario-Refacciones-Citi/main/InventarioAlmacen.xlsx';
+let RAW_INV = [];   // Filas de hoja InventarioAlmacen
+let RAW_MP  = [];   // Filas catálogo MP
+let DATA    = [];   // Filas procesadas {codigo, desc, almacen, existencia, tipo, clasif, tnec, dias}
+let chartInstances = { 1:null, 2:null, 3:null };
 
-// ══ CACHÉ DE ELEMENTOS DOM ════════════════════════════════════
-const $ = id => document.getElementById(id);
-const DOM = {};
-function cacheDOM(){
-  ['ts','dot-inv','st-inv','btn-inv','btn-reset','empty','dash',
-   'search','table-count','tb-det','tb-res','tb-alm','chart-tipos','chart-alm',
-   'k-mat','k-mat-lbl','k-tipos-sub','k-exist','k-exist-sub','k-con','k-con-p',
-   'k-sin','k-sin-p','k-sc','k-sc-lbl','k-sc-exist','kpi-mat',
-   'active-filter','card-tipos','card-alm','tcard','th-tipo',
-   'ttl-chart-tipos','lbl-familia','wrap-tipo','wrap-familia',
-   'btn-prev','btn-corr',
-   'ms-alm-options','ms-fam-options','ms-clas-options','ms-tnec-options',
-   'ms-tipo-options','ms-exist-options',
-   'f-badge-alm','f-badge-fam','f-badge-clas','f-badge-tnec','f-badge-tipo','f-badge-exist',
-   'f-body-alm','f-body-fam','f-body-clas','f-body-tnec','f-body-tipo','f-body-exist',
-   'f-arr-alm','f-arr-fam','f-arr-clas','f-arr-tnec','f-arr-tipo','f-arr-exist'
-  ].forEach(id=>{DOM[id]=$(id);});
-}
-
-// ══ ESTADO GLOBAL ═══════════════════════════════════════════
-let invData=null;
-let allClas=[],allSC=[];
-let baseClas=[],baseSC=[];
-let selTipos=new Set(), selAlms=new Set(), selRows=new Set();
-let modoRefac='prev', familiaCol='';
-
-
-// ══ MOTOR MULTI-SELECT INLINE ════════════════════════════════
-// sel.size===0  → "Todos" (no filtra nada)
-// sel===Set{'__none__'} → ninguno
-// sel con valores reales → solo esos valores
-const MS={
-  alm: {sel:new Set(), opts:[], optsId:'ms-alm-options',  badgeId:'f-badge-alm'},
-  fam: {sel:new Set(), opts:[], optsId:'ms-fam-options',  badgeId:'f-badge-fam'},
-  clas:{sel:new Set(), opts:[], optsId:'ms-clas-options', badgeId:'f-badge-clas'},
-  tnec:{sel:new Set(), opts:[], optsId:'ms-tnec-options', badgeId:'f-badge-tnec'},
-  tipo:{sel:new Set(), opts:[], optsId:'ms-tipo-options', badgeId:'f-badge-tipo'},
-  exist:{sel:new Set(), opts:['Con existencia','Sin existencia'], optsId:'ms-exist-options', badgeId:'f-badge-exist'}
+// Filtros (Set vacío = todos)
+const filtros = {
+  alm:   { sel: new Set(), opts: [] },
+  tipo:  { sel: new Set(), opts: [] },
+  exist: { sel: new Set(), opts: ['Con existencia','Sin existencia'] },
+  clas:  { sel: new Set(), opts: [] },
+  tnec:  { sel: new Set(), opts: [] }
 };
 
-function msIsAll(k){ return MS[k].sel.size===0; }
-
-function msSetSingle(k, value){
-  // Seleccionar una sola opción (usado desde BI)
-  MS[k].sel.clear();
-  MS[k].sel.add(value);
-  msRender(k); msBadge(k);
+// ============================================================
+// NAVEGACIÓN
+// ============================================================
+function toggleGroup(id) {
+  document.querySelector(`#${id} .nav-group-header`).classList.toggle('open');
+  document.getElementById(`children-${id}`).classList.toggle('open');
+}
+function changeDash(n) {
+  document.querySelectorAll('.dash-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`dash-${n}`).classList.add('active');
+  document.getElementById(`t${n}`).classList.add('active');
+  // Re-renderizar la gráfica del panel activo
+  renderActiveTab();
 }
 
-function msSetMultiple(k, values){
-  // Seleccionar un conjunto de valores (desde BI multi-select)
-  MS[k].sel.clear();
-  values.forEach(v=>MS[k].sel.add(v));
-  if(MS[k].sel.size===MS[k].opts.length) MS[k].sel.clear(); // si son todos, colapsar a "todos"
-  msRender(k); msBadge(k);
+// ============================================================
+// OVERLAY
+// ============================================================
+function mostrarOverlay(b) {
+  document.getElementById('overlay').classList.toggle('show', !!b);
 }
 
-function msPopulate(k, opts){
-  MS[k].opts=opts; MS[k].sel.clear(); msRender(k); msBadge(k);
-}
-
-function msRender(k){
-  const s=MS[k];
-  const el=$(s.optsId); if(!el) return;
-  const isAll=msIsAll(k);
-  const frag=document.createDocumentFragment();
-  // Fila "Todos"
-  const allDiv=document.createElement('div');
-  allDiv.className='ms-opt ms-opt-all';
-  allDiv.innerHTML=`<input type="checkbox" id="mso-${k}-__all__"${isAll?' checked':''} onchange="msChgAll('${k}',this)"><label for="mso-${k}-__all__">Todos</label>`;
-  frag.appendChild(allDiv);
-  // Opciones individuales
-  for(const o of s.opts){
-    const chk=isAll||s.sel.has(o);
-    const id='mso-'+k+'-'+o.replace(/\W/g,'_');
-    const div=document.createElement('div'); div.className='ms-opt';
-    div.innerHTML=`<input type="checkbox" id="${id}" value="${o}"${chk?' checked':''} onchange="msChg('${k}',this)"><label for="${id}">${o}</label>`;
-    frag.appendChild(div);
+// ============================================================
+// CARGA AUTOMÁTICA DESDE EXCEL
+// ============================================================
+async function cargarDatos() {
+  mostrarOverlay(true);
+  try {
+    const resp = await fetch(RAW_URL, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('Sin respuesta');
+    const buf = await resp.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const sName = wb.SheetNames.includes('InventarioAlmacen') ? 'InventarioAlmacen' : wb.SheetNames[0];
+    RAW_INV = XLSX.utils.sheet_to_json(wb.Sheets[sName], { defval: '' });
+    const mpSheet = wb.SheetNames.find(s => /c[oó]digos|mp|mtto|cat[aá]logo/i.test(s) && s !== sName) || wb.SheetNames.find(s => s !== sName);
+    RAW_MP = mpSheet ? XLSX.utils.sheet_to_json(wb.Sheets[mpSheet], { defval: '' }) : [];
+    procesarDatos();
+    document.getElementById('hdr-status').textContent = 'Actualizado: ' + new Date().toLocaleString('es-MX');
+  } catch (e) {
+    document.getElementById('hdr-status').textContent = 'Error al cargar datos';
+    console.error(e);
+  } finally {
+    mostrarOverlay(false);
   }
-  el.innerHTML=''; el.appendChild(frag);
 }
 
-function msBadge(k){
-  // Actualizar badge de la cabecera del filtro
-  const s=MS[k], el=$(s.badgeId); if(!el) return;
-  if(s.sel.size===0 || s.sel.has('__none__')){ el.style.display='none'; el.textContent=''; }
-  else{ el.textContent=s.sel.size; el.style.display='inline-block'; }
-}
+// ============================================================
+// PROCESAR FILAS DEL EXCEL
+// ============================================================
+function procesarDatos() {
+  if (!RAW_INV.length) return;
+  const invCols = Object.keys(RAW_INV[0]);
 
-function msChgAll(k, el){
-  if(el.checked){ MS[k].sel.clear(); }          // Todos marcado → limpiar (= todos)
-  else { MS[k].sel=new Set(['__none__']); }       // Todos desmarcado → ninguno
-  msRender(k); msBadge(k); msFilter();
-}
-
-function msChg(k, el){
-  const s=MS[k];
-  if(el.checked){
-    // Marcar una opción individual
-    if(s.sel.has('__none__')) s.sel.delete('__none__');
-    if(s.sel.size===0){
-      // Veníamos de "Todos": ahora queremos SOLO esta opción
-      s.sel.add(el.value);
-      // No expandimos; la lógica es: marcar uno desde "Todos" = seleccionar solo ese
-    } else {
-      s.sel.add(el.value);
-      // Si ahora están todos → colapsar a "Todos"
-      if(s.sel.size===s.opts.length) s.sel.clear();
-    }
-  } else {
-    // Desmarcar una opción individual
-    if(s.sel.size===0){
-      // Desde "Todos": expandir a todos menos este
-      s.opts.forEach(o=>{ if(o!==el.value) s.sel.add(o); });
-    } else {
-      s.sel.delete(el.value);
-      if(s.sel.size===0) s.sel.add('__none__'); // último desmarcado → ninguno
+  // Construir Set de tipos válidos desde MP
+  const tiposSet = new Set();
+  if (RAW_MP.length) {
+    const mpCols = Object.keys(RAW_MP[0]);
+    const mpComp = mpCols.find(c => c.trim() === 'COMPONENTE') || mpCols.find(c => /^componente$/i.test(c.trim())) || mpCols[2];
+    for (const r of RAW_MP) {
+      const v = String(r[mpComp] || '').trim().toUpperCase();
+      if (v) tiposSet.add(v);
     }
   }
-  msRender(k); msBadge(k); msFilter();
+
+  const findCol = (exact, regex, fallbackIdx) =>
+    invCols.find(c => c.trim() === exact) ||
+    invCols.find(c => regex.test(c.trim())) ||
+    invCols[fallbackIdx];
+
+  const cCod    = findCol('Código',      /^c[oó]digo$/i, 2);
+  const cMtto   = findCol('MTTO',        /^mtto$/i, 3);
+  const cDesc   = findCol('Descripción', /^descripci/i, 4);
+  const cExist  = findCol('Existencias', /^exist/i, 12);
+  const cAlm    = findCol('Almacén',     /^alm[aá]c[eé]n$/i, 0);
+  const cDiv    = findCol('Division',    /^divis/i, 1);
+  const cFam    = invCols.find(c => /^famil/i.test(c.trim())) || '';
+  const cClas   = invCols.find(c => /^clasificaci[oó]n$/i.test(c.trim())) || invCols.find(c => /clasif/i.test(c.trim())) || null;
+  const cTnec   = invCols.find(c => /necesidad/i.test(c.trim())) || null;
+  // Días de Inventario
+  const cDias   = invCols.find(c => /d[ií]as.*inventario|d[ií]as_inventario|d[ií]as inv/i.test(c.trim())) || null;
+
+  const out = [];
+  for (const r of RAW_INV) {
+    const codigo = String(r[cCod] || '').trim();
+    if (!codigo) continue;
+    const alm = String(r[cAlm] || '').trim();
+    const div = String(r[cDiv] || '').trim();
+    const almacen = (alm && div) ? alm + ' – ' + div : (alm || div || 'Sin almacén');
+    const exist = parseFloat(String(r[cExist] || '0').replace(',', '.')) || 0;
+    const mttoRaw = String(r[cMtto] || '').trim().toUpperCase();
+    const familia = cFam ? (String(r[cFam] || '').trim() || 'Sin familia') : 'Sin familia';
+    let tipo;
+    if (tiposSet.has(mttoRaw)) {
+      tipo = mttoRaw.charAt(0) + mttoRaw.slice(1).toLowerCase();
+    } else {
+      tipo = familia || 'Sin clasificar';
+    }
+    let dias = null;
+    if (cDias) {
+      const dVal = parseFloat(String(r[cDias] || '').replace(',', '.'));
+      if (isFinite(dVal) && dVal >= 0) dias = dVal;
+    }
+    out.push({
+      codigo, almacen, existencia: exist, tipo,
+      desc:   String(r[cDesc] || '').trim(),
+      clasif: cClas ? String(r[cClas] || '').trim() : '',
+      tnec:   cTnec ? String(r[cTnec] || '').trim() : '',
+      dias
+    });
+  }
+  DATA = out;
+  poblarFiltros();
+  renderActiveTab();
 }
 
-// ── Acordeón de filtros ──────────────────────────────────────
-function fToggle(key){
-  const body=$('f-body-'+key), arr=$('f-arr-'+key);
-  if(!body) return;
-  const open=body.classList.contains('open');
-  body.classList.toggle('open',!open);
-  if(arr) arr.classList.toggle('open',!open);
+// ============================================================
+// POBLAR FILTROS (opciones únicas desde DATA)
+// ============================================================
+function poblarFiltros() {
+  filtros.alm.opts  = [...new Set(DATA.map(r => r.almacen))].sort();
+  filtros.tipo.opts = [...new Set(DATA.map(r => r.tipo))].sort();
+  filtros.clas.opts = [...new Set(DATA.map(r => r.clasif).filter(Boolean))].sort();
+  filtros.tnec.opts = [...new Set(DATA.map(r => r.tnec).filter(Boolean))].sort();
+  ['alm','tipo','exist','clas','tnec'].forEach(k => { filtros[k].sel.clear(); renderDropdown(k); });
 }
 
-function msFilter(){
-  selTipos.clear(); selAlms.clear(); selRows.clear();
-  if(allClas.length||allSC.length) scheduleFilter();
-}
-
-// Aplazamiento de filtrado: agrupa clics rápidos en un solo render
-let _filterTimer=null;
-function scheduleFilter(){
-  clearTimeout(_filterTimer);
-  _filterTimer=setTimeout(applyFilters, 80);
-}
-
-function clearAllFilters(){
-  ['alm','fam','clas','tnec','tipo','exist'].forEach(k=>{
-    MS[k].sel.clear(); msRender(k); msBadge(k);
+// ============================================================
+// DROPDOWNS CON CHECKBOX
+// ============================================================
+function renderDropdown(k) {
+  const content = document.getElementById(`dd-${k}-content`);
+  if (!content) return;
+  const f = filtros[k];
+  const isAll = f.sel.size === 0;
+  let html = `<div class="dropdown-item all-item">
+    <input type="checkbox" id="opt-${k}-all" ${isAll?'checked':''} onchange="toggleAll('${k}',this.checked)">
+    <label for="opt-${k}-all" style="cursor:pointer">Todos</label>
+  </div>`;
+  f.opts.forEach((o,i) => {
+    const id = `opt-${k}-${i}`;
+    const chk = isAll || f.sel.has(o);
+    html += `<div class="dropdown-item">
+      <input type="checkbox" id="${id}" ${chk?'checked':''} onchange="toggleOpt('${k}','${o.replace(/'/g,"\\'")}',this.checked)">
+      <label for="${id}" style="cursor:pointer">${o}</label>
+    </div>`;
   });
-  selTipos.clear(); selAlms.clear(); selRows.clear();
-  applyFilters();
-}
-
-// ══ STORAGE ══════════════════════════════════════════════════
-async function save(k,v){
-  const json=JSON.stringify(v);
-  try{localStorage.setItem('inv_dash_'+k,json);}catch(e){}
-  try{if(window.storage)await window.storage.set(k,json);}catch(e){}
-}
-async function load(k){
-  try{const v=localStorage.getItem('inv_dash_'+k);if(v)return JSON.parse(v);}catch(e){}
-  try{if(window.storage){const r=await window.storage.get(k);if(r)return JSON.parse(r.value);}}catch(e){}
-  return null;
-}
-async function clearStorage(){
-  ['inv_v10','inv_mp_v10','inv_ts_v10'].forEach(k=>{try{localStorage.removeItem('inv_dash_'+k);}catch(e){}});
-  try{if(window.storage){
-    await window.storage.delete('inv_v10');
-    await window.storage.delete('inv_mp_v10');
-    await window.storage.delete('inv_ts_v10');
-  }}catch(e){}
-}
-
-// ══ PARSER COMPARTIDO DE WORKBOOK ════════════════════════════
-function parseWorkbook(wb){
-  const sName=wb.SheetNames.includes('InventarioAlmacen')?'InventarioAlmacen':wb.SheetNames[0];
-  const invRows=XLSX.utils.sheet_to_json(wb.Sheets[sName],{defval:''});
-  const mpSheet=wb.SheetNames.find(s=>/c[oó]digos|mp|mtto|cat[aá]logo/i.test(s)&&s!==sName)||wb.SheetNames.find(s=>s!==sName);
-  const mpRows=mpSheet?XLSX.utils.sheet_to_json(wb.Sheets[mpSheet],{defval:''}):[]; 
-  return {invRows,mpRows};
-}
-
-function applyParsed(invRows,mpRows){
-  invData=invRows;
-  window._mpData=mpRows;
-  save(K_INV,invData); save('inv_mp_v10',mpRows);
-  const now=new Date().toLocaleString('es-MX');
-  save(K_TS,now);
-  DOM['ts'].textContent='Actualizado: '+now;
-  updateStatus();
-  selTipos.clear();selAlms.clear();selRows.clear();
-  buildAndRender();
-}
-
-// ══ AUTO-ACTUALIZACIÓN ══════════════════════════════════════
-async function autoUpdate(){
-  const RAW_URL='https://raw.githubusercontent.com/EDSALAS15/Inventario-Refacciones-Citi/main/InventarioAlmacen.xlsx';
-  const tsEl=DOM['ts'];
-  const prevTs=tsEl.textContent;
-  tsEl.textContent='ACTUALIZANDO';
-  try{
-    const resp=await fetch(RAW_URL,{cache:'no-store'});
-    if(!resp.ok)throw new Error('Sin respuesta');
-    const buf=await resp.arrayBuffer();
-    const wb=XLSX.read(new Uint8Array(buf),{type:'array'});
-    const {invRows,mpRows}=parseWorkbook(wb);
-    applyParsed(invRows,mpRows);
-  }catch(e){
-    tsEl.textContent=prevTs||'Sin datos cargados';
-    if(invData&&invData.length)buildAndRender();
-  }
-}
-
-// ══ INIT ═════════════════════════════════════════════════════
-async function init(){
-  cacheDOM();
-  invData=await load(K_INV);
-  window._mpData=await load('inv_mp_v10')||[];
-  const ts=await load(K_TS);
-  if(ts)DOM['ts'].textContent='Actualizado: '+ts;
-  updateStatus();
-  await autoUpdate();
-}
-
-// ══ CARGA MANUAL DE ARCHIVO ══════════════════════════════════
-$('f-inv').addEventListener('change',e=>readFile(e.target.files[0]));
-
-function readFile(file){
-  if(!file)return;
-  const r=new FileReader();
-  r.onload=evt=>{
-    try{
-      const wb=XLSX.read(evt.target.result,{type:'binary'});
-      const {invRows,mpRows}=parseWorkbook(wb);
-      applyParsed(invRows,mpRows);
-    }catch(e){alert('Error: '+e.message);}
-  };
-  r.readAsBinaryString(file);
-}
-
-function updateStatus(){
-  const d=invData, mp=window._mpData||[];
-  const hasData=!!(d&&d.length>0);
-  DOM['dot-inv'].className='dot'+(hasData?' ok':'');
-  if(hasData){
-    const ts=localStorage.getItem('inv_dash_'+K_TS)||'';
-    DOM['st-inv'].innerHTML=d.length.toLocaleString()+' registros'+(mp.length?' · '+mp.length+' cód.':'')+
-      (ts?'<br><span style="font-size:10px;color:var(--tx3)">En memoria desde: '+JSON.parse(ts)+'</span>':'');
+  content.innerHTML = html;
+  // Actualizar label y badge
+  const lbl = document.getElementById(`dd-${k}-label`);
+  const bdg = document.getElementById(`dd-${k}-badge`);
+  if (f.sel.size === 0) {
+    lbl.textContent = 'Todos';
+    if (bdg) bdg.textContent = '';
   } else {
-    DOM['st-inv'].textContent='Sin datos en memoria';
+    lbl.textContent = f.sel.size === 1 ? [...f.sel][0] : f.sel.size + ' sel.';
+    if (bdg) bdg.innerHTML = '<span class="badge">' + f.sel.size + '</span>';
   }
-  DOM['btn-inv'].textContent=hasData?'Actualizar archivo':'Cargar archivo';
-  if(DOM['btn-reset'])DOM['btn-reset'].style.display=hasData?'block':'none';
 }
 
-async function resetStorage(){
-  if(!confirm('¿Limpiar los datos en memoria? Deberás volver a cargar el archivo.')) return;
-  invData=null; window._mpData=[];
-  await clearStorage();
-  DOM['empty'].style.display='block';
-  DOM['dash'].style.display='none';
-  updateStatus();
-}
-
-// ══ CONSTRUCCIÓN DE FILAS ════════════════════════════════════
-function buildRows(){
-  const mpRaw=window._mpData||[];
-  const invCols=invData.length?Object.keys(invData[0]):[];
-  const tiposSet=new Set();
-  if(mpRaw.length){
-    const mpCols=Object.keys(mpRaw[0]);
-    const mpCompCol=mpCols.find(c=>c.trim()==='COMPONENTE')||mpCols.find(c=>/^componente$/i.test(c.trim()))||mpCols[2];
-    for(const r of mpRaw){const v=String(r[mpCompCol]||'').trim().toUpperCase();if(v)tiposSet.add(v);}
-  }
-  const fc=(ex,re,i)=>invCols.find(c=>c.trim()===ex)||invCols.find(c=>re.test(c.trim()))||invCols[i];
-  const codCol  =fc('Código',     /^c[oó]digo$/i,    2);
-  const mttoCol =fc('MTTO',       /^mtto$/i,          3);
-  const descCol =fc('Descripción',/^descripci/i,      4);
-  const existCol=fc('Existencias',/^exist/i,         12);
-  const almCol  =fc('Almacén',    /^alm[aá]c[eé]n$/i,0);
-  const divCol  =fc('Division',   /^divis/i,          1);
-  familiaCol=invCols.find(c=>['Familia','familia','FAMILIA'].includes(c.trim()))||invCols.find(c=>/^famil/i.test(c.trim()))||invCols.find(c=>/^clasif/i.test(c.trim()))||invCols[9]||'';
-  const clasifCol=invCols.find(c=>/^clasificaci[oó]n$/i.test(c.trim()))||invCols.find(c=>/clasif/i.test(c.trim()))||null;
-  const tnecCol    =invCols.find(c=>c.trim()==='Tipo de Necesidad')||invCols.find(c=>/necesidad/i.test(c.trim()))||null;
-  const consMensCol=invCols.find(c=>c.trim()==='Consumo mensual')||invCols.find(c=>/consumo.{0,3}mensual/i.test(c.trim()))||null;
-  const consDiarCol=invCols.find(c=>c.trim()==='Consumo Diario' )||invCols.find(c=>/consumo.{0,3}diario/i.test(c.trim()) )||null;
-  const diasInvCol =invCols.find(c=>c.trim()==='Días de Inventario')||invCols.find(c=>/d.as.{0,5}inventario/i.test(c.trim()))||null;
-  if(DOM['lbl-familia'])DOM['lbl-familia'].textContent=familiaCol||'Agrupación';
-  console.log('[Cols detectadas]',{consMensCol,consDiarCol,diasInvCol,tnecCol,clasifCol});
-  console.log('[Cols disponibles]', invCols);
-  const clas=[],sc=[];
-  const hasFam=!!familiaCol, hasClas=!!clasifCol, hasTnec=!!tnecCol, hasDiar=!!consDiarCol, hasDias=!!diasInvCol;
-  for(const r of invData){
-    const codigo=String(r[codCol]||'').trim(); if(!codigo)continue;
-    const alm=String(r[almCol]||'').trim(), div=String(r[divCol]||'').trim();
-    const almacen=(alm&&div)?alm+' – '+div:(alm||div||'Sin almacén');
-    const exist=parseFloat(String(r[existCol]||'0').replace(',','.'))||0;
-    const mttoRaw=String(r[mttoCol]||'').trim().toUpperCase();
-    const familia=hasFam?String(r[familiaCol]||'').trim()||'Sin familia':'Sin familia';
-    const row={
-      codigo, desc:String(r[descCol]||'').trim(),
-      almacen, existencia:exist, familia,
-      clasif:hasClas?String(r[clasifCol]||'').trim():'',
-      tnec:hasTnec?String(r[tnecCol]||'').trim():'',
-      consDiar:consDiarCol?parseFloat(String(r[consDiarCol]||'0').replace(',','.'))||0:0,
-      diasInv: diasInvCol ?parseFloat(String(r[diasInvCol] ||'0').replace(',','.'))||0:0
-    };
-    if(tiposSet.has(mttoRaw)){row.tipo=mttoRaw.charAt(0)+mttoRaw.slice(1).toLowerCase();clas.push(row);}
-    else{row.tipo=familia||'Sin familia';sc.push(row);}
-  }
-  return{clas,sc};
-}
-
-// ══ BUILD & RENDER ═══════════════════════════════════════════
-function buildAndRender(){
-  const{clas,sc}=buildRows();
-  allClas=clas; allSC=sc;
-  populateFilters();
-  const allRows=[...allClas,...allSC];
-  msPopulate('clas',[...new Set(allRows.map(r=>r.clasif).filter(Boolean))].sort());
-  msPopulate('tnec',[...new Set(allRows.map(r=>r.tnec).filter(Boolean))].sort());
-  DOM['empty'].style.display='none';
-  DOM['dash'].style.display='flex';
-  updateKPIsc();
-  applyFilters();
-}
-
-// ══ FILTROS SIDEBAR ══════════════════════════════════════════
-function populateFilters(){
-  const src=modoRefac==='corr'?allSC:allClas;
-  msPopulate('alm',[...new Set(src.map(r=>r.almacen))].sort());
-  if(modoRefac==='prev'){
-    DOM['wrap-tipo'].style.display='';
-    DOM['wrap-familia'].style.display='none';
-    msPopulate('tipo',[...new Set(allClas.map(r=>r.tipo))].sort());
+function toggleAll(k, checked) {
+  if (checked) {
+    filtros[k].sel.clear();
   } else {
-    DOM['wrap-tipo'].style.display='none';
-    DOM['wrap-familia'].style.display='';
-    msPopulate('fam',[...new Set(allSC.map(r=>r.tipo))].filter(Boolean).sort());
+    // Si "Todos" se desmarca con todo seleccionado, dejar todo desmarcado
+    filtros[k].sel = new Set(['__none__']);
   }
-  // Existencia: opciones fijas, solo re-renderizar para reset
-  MS.exist.sel.clear(); msRender('exist'); msBadge('exist');
+  renderDropdown(k);
+  renderActiveTab();
 }
 
-function setRefac(modo){
-  if(modoRefac===modo)return;
-  modoRefac=modo;
-  selTipos.clear();selAlms.clear();selRows.clear();
-  DOM['btn-prev'].classList.toggle('active',modo==='prev');
-  DOM['btn-corr'].classList.toggle('active',modo==='corr');
-  const isPrev=modo==='prev';
-  DOM['k-mat-lbl'].textContent=isPrev?'Materiales preventivos':'Materiales correctivos';
-  DOM['k-exist-sub'].textContent=isPrev?'Piezas preventivas':'Piezas correctivas';
-  DOM['k-sc-lbl'].textContent=isPrev?'Correctivos':'Preventivos';
-  DOM['ttl-chart-tipos'].textContent=isPrev?'Existencias por Tipo de Mantenimiento':'Existencias por '+(familiaCol||'Clasificación');
-  if(DOM['th-tipo'])DOM['th-tipo'].textContent=isPrev?'Tipo de Mantenimiento':(familiaCol||'Familia');
-  MS.exist.sel.clear(); msRender('exist'); msBadge('exist');
-  populateFilters();
-  applyFilters();
-}
-
-function applyFilters(){
-  const sAlm=MS.alm.sel, sClas=MS.clas.sel, sFam=MS.fam.sel;
-  const sTnec=MS.tnec.sel, sTipo=MS.tipo.sel, sExist=MS.exist.sel;
-  const srch=DOM['search'].value.toLowerCase();
-
-  // NOTA: el filtro de almacén NO se aplica en baseClas/baseSC.
-  // Se aplica solo como highlight visual en renderAll (igual que el BI de barras).
-  // Esto garantiza que la gráfica mantenga siempre el mismo tamaño y número de columnas.
-  const filt=(rows,extraFn)=>{
-    let r=rows;
-    // Existencia
-    if(sExist.size>0 && !sExist.has('__none__')){
-      const conEx=sExist.has('Con existencia'), sinEx=sExist.has('Sin existencia');
-      if(conEx && !sinEx) r=r.filter(x=>x.existencia>0);
-      else if(sinEx && !conEx) r=r.filter(x=>x.existencia<=0);
+function toggleOpt(k, val, checked) {
+  const f = filtros[k];
+  if (checked) {
+    if (f.sel.has('__none__')) f.sel.delete('__none__');
+    if (f.sel.size === 0) {
+      // Venía de "Todos" → seleccionar solo este
+      f.sel.add(val);
+    } else {
+      f.sel.add(val);
+      // Si ahora están todos marcados → colapsar a "Todos"
+      if (f.sel.size === f.opts.length) f.sel.clear();
     }
-    // Clasificación
-    if(sClas.size>0){if(sClas.has('__none__'))r=[];else r=r.filter(x=>sClas.has(x.clasif));}
-    // Tipo de Necesidad
-    if(sTnec.size>0){if(sTnec.has('__none__'))r=[];else r=r.filter(x=>sTnec.has(x.tnec));}
-    if(srch) r=r.filter(x=>x.codigo.toLowerCase().includes(srch)||x.desc.toLowerCase().includes(srch)||x.tipo.toLowerCase().includes(srch)||x.almacen.toLowerCase().includes(srch));
-    if(extraFn) r=r.filter(extraFn);
-    return r;
-  };
-
-  if(modoRefac==='prev'){
-    const tipoFn=sTipo.size>0&&!sTipo.has('__none__') ? r=>sTipo.has(r.tipo) : null;
-    baseClas=filt(allClas,tipoFn);
-    baseSC=[...allSC];
   } else {
-    baseSC=filt(allSC,sFam.size>0?sFam.has('__none__')?()=>false:r=>sFam.has(r.tipo):null);
-    baseClas=[...allClas];
+    if (f.sel.size === 0) {
+      // Desde "Todos" → expandir a todos menos este
+      f.opts.forEach(o => { if (o !== val) f.sel.add(o); });
+    } else {
+      f.sel.delete(val);
+      if (f.sel.size === 0) f.sel.add('__none__');
+    }
   }
-  selTipos.clear(); selAlms.clear(); selRows.clear();
-  renderAll();
+  renderDropdown(k);
+  renderActiveTab();
 }
 
-// ══ RENDER PRINCIPAL ═════════════════════════════════════════
-function renderAll(){
-  const activeRows=modoRefac==='prev'?baseClas:baseSC;
-  // Universo completo: siempre igual → gráfica de almacén tiene tamaño y columnas fijos
-  const almUniverse=modoRefac==='prev'?allClas:allSC;
-
-  // BI de tipo y almacén (clic en gráfica)
-  let biRows=activeRows;
-  if(selTipos.size>0) biRows=biRows.filter(r=>selTipos.has(r.tipo));
-  if(selAlms.size>0)  biRows=biRows.filter(r=>selAlms.has(r.almacen));
-
-  // Sidebar almacén: actúa igual que BI — filtra la tabla y resalta barras,
-  // pero NO cambia el número de columnas de la gráfica
-  const sidebarAlmActivo = MS.alm.sel.size>0 && !MS.alm.sel.has('__none__');
-  if(sidebarAlmActivo) biRows=biRows.filter(r=>MS.alm.sel.has(r.almacen));
-
-  const hasRowSel=selRows.size>0;
-  const selectedRows=hasRowSel?biRows.filter(r=>selRows.has(r.codigo)):biRows;
-  const chartSource=hasRowSel?selectedRows:biRows;
-  const rowSelTipos=hasRowSel?new Set(selectedRows.map(r=>r.tipo)):selTipos;
-  const rowSelAlms =hasRowSel?new Set(selectedRows.map(r=>r.almacen)):selAlms;
-
-  // Highlight de barras: BI tiene prioridad; si no hay BI, usar sidebar almacén
-  const almHighlight = rowSelAlms.size>0 ? rowSelAlms
-                     : sidebarAlmActivo   ? MS.alm.sel
-                     : new Set();
-
-  updateKPIs(activeRows, chartSource);
-  renderChartTipos(activeRows, rowSelTipos, rowSelAlms, hasRowSel?selectedRows:null);
-  // La gráfica de almacén siempre recibe almUniverse (completo) → tamaño fijo.
-  // Las alturas se calculan desde activeRows (filtrado por tipo/exist/clas/tnec).
-  // El highlight (dimming) viene de almHighlight.
-  renderChartAlm(activeRows, almUniverse, rowSelTipos, almHighlight, hasRowSel?selectedRows:null);
-  renderChartDiasAlm(hasRowSel?selectedRows:biRows, almUniverse);
-  renderTables(biRows, selectedRows);
-  updateBIBadge();
-  const hasSel=selTipos.size>0||selAlms.size>0||selRows.size>0||sidebarAlmActivo;
-  ['card-tipos','card-alm','tcard'].forEach(id=>DOM[id].classList.toggle('has-sel',hasSel));
+function toggleDropdown(id) {
+  const content = document.getElementById(`${id}-content`);
+  if (!content) return;
+  const open = content.classList.contains('open');
+  // Cerrar otros
+  document.querySelectorAll('.dropdown-content.open').forEach(d => d.classList.remove('open'));
+  if (!open) {
+    content.classList.add('open');
+    setTimeout(() => document.addEventListener('click', function handler(ev) {
+      if (!document.getElementById(id).contains(ev.target)) {
+        content.classList.remove('open');
+        document.removeEventListener('click', handler);
+      }
+    }), 0);
+  }
 }
 
-// ══ KPIs ═════════════════════════════════════════════════════
-function updateKPIsc(){
-  DOM['k-sc'].textContent=allSC.length.toLocaleString();
-  DOM['k-sc-exist'].textContent=allSC.reduce((a,r)=>a+r.existencia,0).toLocaleString('es-MX')+' piezas';
+// Sincroniza dropdowns "espejo" (pestañas 2 y 3 abren los mismos del panel 1)
+function mirrorDropdown(originId, mirrorId) {
+  // Abrir el dropdown del filtro principal cambiando a pestaña 1 momentáneamente NO,
+  // mejor: replicar el contenido en el espejo
+  // Solución simple: cambiar a panel 1 y abrir el dropdown allí
+  changeDash(1);
+  setTimeout(() => toggleDropdown(originId), 50);
 }
-function updateKPIs(base,bi){
-  const rows=(selTipos.size>0||selAlms.size>0||selRows.size>0)?bi:base;
-  const tot=rows.length;
-  let con=0,exist=0;
-  const tiposU=new Set();
-  for(const r of rows){
-    if(r.existencia>0)con++;
-    exist+=r.existencia;
+
+function limpiarFiltros() {
+  ['alm','tipo','exist','clas','tnec'].forEach(k => {
+    filtros[k].sel.clear();
+    renderDropdown(k);
+  });
+  renderActiveTab();
+}
+
+// ============================================================
+// FILTRAR DATA SEGÚN FILTROS ACTIVOS
+// ============================================================
+function aplicarFiltros(rows) {
+  let r = rows;
+  const fa = filtros;
+  if (fa.alm.sel.size > 0) {
+    if (fa.alm.sel.has('__none__')) return [];
+    r = r.filter(x => fa.alm.sel.has(x.almacen));
+  }
+  if (fa.tipo.sel.size > 0) {
+    if (fa.tipo.sel.has('__none__')) return [];
+    r = r.filter(x => fa.tipo.sel.has(x.tipo));
+  }
+  if (fa.exist.sel.size > 0 && !fa.exist.sel.has('__none__')) {
+    const con = fa.exist.sel.has('Con existencia');
+    const sin = fa.exist.sel.has('Sin existencia');
+    if (con && !sin) r = r.filter(x => x.existencia > 0);
+    else if (sin && !con) r = r.filter(x => x.existencia <= 0);
+  }
+  if (fa.clas.sel.size > 0) {
+    if (fa.clas.sel.has('__none__')) return [];
+    r = r.filter(x => !x.clasif || fa.clas.sel.has(x.clasif));
+  }
+  if (fa.tnec.sel.size > 0) {
+    if (fa.tnec.sel.has('__none__')) return [];
+    r = r.filter(x => !x.tnec || fa.tnec.sel.has(x.tnec));
+  }
+  return r;
+}
+
+// ============================================================
+// RENDER DE PESTAÑAS
+// ============================================================
+function renderActiveTab() {
+  if (!DATA.length) return;
+  const activeTab = document.querySelector('.dash-panel.active');
+  if (!activeTab) return;
+  const id = activeTab.id;
+  // Actualizar etiquetas de zona
+  const almLbl = filtros.alm.sel.size === 0 ? 'TODOS LOS ALMACENES'
+                : filtros.alm.sel.has('__none__') ? 'NINGÚN ALMACÉN'
+                : filtros.alm.sel.size === 1 ? [...filtros.alm.sel][0].toUpperCase()
+                : filtros.alm.sel.size + ' ALMACENES';
+  const tipoLbl = filtros.tipo.sel.size === 0 ? 'TODOS LOS TIPOS'
+                : filtros.tipo.sel.has('__none__') ? 'NINGÚN TIPO'
+                : filtros.tipo.sel.size === 1 ? [...filtros.tipo.sel][0].toUpperCase()
+                : filtros.tipo.sel.size + ' TIPOS';
+
+  if (id === 'dash-1') {
+    document.getElementById('ct-zona-1').textContent = almLbl;
+    renderPanel1();
+  } else if (id === 'dash-2') {
+    document.getElementById('ct-zona-2').textContent = tipoLbl;
+    renderPanel2();
+  } else if (id === 'dash-3') {
+    document.getElementById('ct-zona-3').textContent = almLbl;
+    renderPanel3();
+  }
+}
+
+// ── Helper: destruir gráfica anterior antes de crear nueva
+function destroyChart(n) {
+  if (chartInstances[n]) { chartInstances[n].destroy(); chartInstances[n] = null; }
+}
+
+// ============================================================
+// PANEL 1: EXISTENCIAS POR TIPO DE MANTENIMIENTO
+// ============================================================
+function renderPanel1() {
+  const rows = aplicarFiltros(DATA);
+  // KPIs
+  const tot = rows.length;
+  let exist = 0, con = 0;
+  const tiposU = new Set();
+  for (const r of rows) {
+    exist += r.existencia;
+    if (r.existencia > 0) con++;
     tiposU.add(r.tipo);
   }
-  const lbl=modoRefac==='prev'?'tipo(s) preventivo(s)':'familia(s)';
-  DOM['k-mat'].textContent=tot.toLocaleString();
-  DOM['k-tipos-sub'].textContent=tiposU.size+' '+lbl;
-  DOM['k-exist'].textContent=exist.toLocaleString('es-MX');
-  DOM['k-con'].textContent=con.toLocaleString();
-  DOM['k-con-p'].textContent=tot?(con/tot*100).toFixed(1)+'% del total':'—';
-  DOM['k-sin'].textContent=(tot-con).toLocaleString();
-  DOM['k-sin-p'].textContent=tot?((tot-con)/tot*100).toFixed(1)+'% del total':'—';
-  DOM['kpi-mat'].classList.toggle('hi',selTipos.size>0||selAlms.size>0||selRows.size>0);
-  // Días de inventario: promedio ponderado (suma exist / suma consumo diario)
-  let sumExist=0, sumDiar=0;
-  for(const r of rows){ sumExist+=r.existencia; sumDiar+=(r.consDiar||0); }
-  const diasProm = sumDiar>0 ? Math.round(sumExist/sumDiar) : null;
-  // Siempre buscar directo (no cachear porque el elemento puede no existir al init)
-  const kDias=document.getElementById('k-dias');
-  if(kDias) kDias.textContent = diasProm!=null ? diasProm.toLocaleString('es-MX') : '—';
-}
+  document.getElementById('kpi-tot').textContent = tot.toLocaleString('es-MX');
+  document.getElementById('kpi-tot-sub').textContent = tiposU.size + ' tipo(s)';
+  document.getElementById('kpi-exist').textContent = exist.toLocaleString('es-MX');
+  document.getElementById('kpi-con').textContent = con.toLocaleString('es-MX');
+  document.getElementById('kpi-con-sub').textContent = tot ? (con/tot*100).toFixed(1) + '%' : '—';
+  document.getElementById('kpi-sin').textContent = (tot-con).toLocaleString('es-MX');
+  document.getElementById('kpi-sin-sub').textContent = tot ? ((tot-con)/tot*100).toFixed(1) + '%' : '—';
 
-// ══ GRÁFICAS SVG ═════════════════════════════════════════════
-function renderChartTipos(rows,sTipos,sAlms,rowData){
-  // Si hay filas seleccionadas en tabla, usarlas como fuente de las barras
-  const src=rowData ? rowData : (sAlms&&sAlms.size>0?rows.filter(r=>sAlms.has(r.almacen)):rows);
-  const tm={};
-  for(const r of src)tm[r.tipo]=(tm[r.tipo]||0)+r.existencia;
-  const data=Object.entries(tm).sort((a,b)=>b[1]-a[1]).map(([l,v],i)=>({l,v,c:PAL[i%PAL.length]}));
-  const ct=DOM['chart-tipos'];
-  if(!data.length){ct.innerHTML='<p style="padding:16px;font-size:12px;color:var(--tx3)">Sin datos</p>';return;}
-  const anyT=sTipos&&sTipos.size>0, maxV=Math.max(...data.map(d=>d.v));
-  const LW=148,BW=148,VW=60,PH=30,PV=14,W=LW+BW+VW,H=data.length*PH+PV*2;
-  const bars=data.map((d,i)=>{
-    const bw=maxV>0?Math.max(Math.round(d.v/maxV*BW),d.v>0?3:0):0;
-    const y=PV+i*PH, isSel=anyT&&sTipos.has(d.l), isDim=anyT&&!isSel;
-    const lbl=d.l.length>21?d.l.slice(0,20)+'…':d.l;
-    return `<g class="bar-group${isDim?' dimmed':''}${isSel?' selected':''}" onclick="onBarTipo(event,'${d.l.replace(/'/g,"\'")}')">
-<rect x="0" y="${y}" width="${W}" height="${PH}" fill="transparent"/>
-<text x="${LW-6}" y="${y+PH/2+4}" text-anchor="end" font-size="11" fill="${isDim?'var(--tx3)':'var(--tx2)'}" font-weight="${isSel?700:400}">${lbl}</text>
-<rect class="bar-rect" x="${LW}" y="${y+6}" width="${bw}" height="${PH-12}" rx="3" fill="${d.c}" opacity="${isDim?.3:.88}"${isSel?` stroke="${d.c}" stroke-width="1.5"`:''}/>
-<text x="${LW+bw+5}" y="${y+PH/2+4}" font-size="10" fill="var(--tx3)">${d.v.toLocaleString('es-MX')}</text>
-</g>`;
-  }).join('');
-  ct.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
-<text x="${W-2}" y="10" text-anchor="end" font-size="9" fill="var(--tx3)">Ctrl+clic = multi</text>${bars}</svg>`;
-}
+  // Gráfica de barras horizontales — Existencias por Tipo
+  const agg = {};
+  for (const r of rows) agg[r.tipo] = (agg[r.tipo]||0) + r.existencia;
+  const arr = Object.entries(agg).sort((a,b) => b[1]-a[1]);
+  const labels = arr.map(([l]) => l);
+  const data   = arr.map(([,v]) => v);
 
-// renderChartAlm(rows, almUniverse, sTipos, sAlms, rowData)
-//   rows        → filas ya filtradas por sidebar (tipo, exist, clas, tnec)
-//                 determinan la ALTURA de cada barra
-//   almUniverse → universo completo de almacenes del modo actual
-//                 determina qué COLUMNAS se dibujan (tamaño fijo)
-//   sTipos      → highlight de tipo (BI)
-//   sAlms       → highlight de almacén (BI o sidebar)
-//   rowData     → selección de filas en tabla (BI de tabla)
-function renderChartAlm(rows, almUniverse, sTipos, sAlms, rowData){
-  // Fuente de datos para calcular alturas:
-  // si hay selección de filas en tabla → esas filas
-  // si hay highlight de tipo → filtrar por tipo
-  // si no → todas las filas filtradas por sidebar
-  const src=rowData ? rowData : (sTipos&&sTipos.size>0 ? rows.filter(r=>sTipos.has(r.tipo)) : rows);
-  window._almExportRows=src;
-
-  // Mapa de existencias por almacén (de las filas filtradas)
-  const amSrc={};
-  for(const r of src) amSrc[r.almacen]=(amSrc[r.almacen]||0)+r.existencia;
-
-  // Lista de almacenes: siempre del universo completo para mantener columnas fijas.
-  // Ordenar por existencia del contexto filtrado (mayor primero), luego alfabético.
-  const allAlms=[...new Set(almUniverse.map(r=>r.almacen))].sort((a,b)=>{
-    const va=amSrc[a]||0, vb=amSrc[b]||0;
-    return vb-va || a.localeCompare(b);
+  destroyChart(1);
+  const ctx = document.getElementById('chart-1').getContext('2d');
+  chartInstances[1] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Existencias',
+        data,
+        backgroundColor: '#880015',
+        borderColor: '#880015',
+        borderWidth: 0,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => c.parsed.x.toLocaleString('es-MX') + ' piezas' } },
+        datalabels: {
+          anchor: 'end', align: 'end',
+          color: '#333',
+          font: { size: 10, weight: 'bold' },
+          formatter: v => v.toLocaleString('es-MX')
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('es-MX') } },
+        y: { ticks: { font: { size: 10 }, autoSkip: false } }
+      }
+    },
+    plugins: [ChartDataLabels]
   });
 
-  // Paleta fija por posición para que los colores no cambien al filtrar
-  const almColor={};
-  allAlms.forEach((a,i)=>almColor[a]=PAL[i%PAL.length]);
-
-  // data: siempre todos los almacenes; v=0 si el filtro no los incluye
-  const data=allAlms.map(alm=>({l:alm, v:amSrc[alm]||0, c:almColor[alm]}));
-
-  const ca=DOM['chart-alm'];
-  if(!data.length){ca.innerHTML='<p style="padding:16px;font-size:12px;color:var(--tx3)">Sin datos</p>';return;}
-
-  const anyA=sAlms&&sAlms.size>0;
-  // maxV sobre las barras del contexto filtrado (no 0) para escalar bien
-  const maxV=Math.max(...data.map(d=>d.v),1);
-
-  // Dimensiones fijas
-  const CW=34,GAP=5,PL=6,PR=6,PT=28,PB=58,BH=110;
-  const W=PL+(CW+GAP)*data.length+PR, H=BH+PT+PB;
-
-  const cols=data.map((d,i)=>{
-    const bh=d.v>0?Math.max(Math.round(d.v/maxV*BH),3):0;
-    const x=PL+i*(CW+GAP), y=PT+(BH-bh);
-    const isSel=anyA&&sAlms.has(d.l), isDim=anyA&&!isSel;
-    const isEmpty=d.v===0;
-    const lbl=d.l.includes('–')?d.l.split('–')[0].trim():d.l.slice(0,5);
-    const sub=d.l.includes('–')?d.l.split('–')[1].trim():'';
-    const barEl=isEmpty
-      ? `<rect x="${x}" y="${PT+BH-1}" width="${CW}" height="2" rx="1" fill="${d.c}" opacity="0.2"/>`
-      : `<rect class="bar-rect" x="${x}" y="${y}" width="${CW}" height="${bh}" rx="3" fill="${d.c}" opacity="${isDim?.25:.88}"${isSel?` stroke="${d.c}" stroke-width="1.5"`:''}/>`;
-    return `<g class="bar-group${isDim?' dimmed':''}${isSel?' selected':''}" data-alm="${d.l}" onclick="onBarAlm(event,this)">
-<rect x="${x-2}" y="${PT}" width="${CW+4}" height="${BH+PB}" fill="transparent"/>
-${barEl}
-<text x="${x+CW/2}" y="${PT+BH+13}" text-anchor="middle" font-size="9" font-weight="${isSel?700:400}" fill="${isEmpty?'var(--tx3)':isDim?'var(--tx3)':'var(--tx2)'}">${lbl}</text>
-<text x="${x+CW/2}" y="${PT+BH+24}" text-anchor="middle" font-size="8" fill="var(--tx3)">${sub.length>7?sub.slice(0,6)+'…':sub}</text>
-<text x="${x+CW/2}" y="${y-5}" text-anchor="middle" font-size="9" fill="${isEmpty?'var(--tx3)':isDim?'var(--tx3)':'var(--tx2)'}">${isEmpty?'':d.v.toLocaleString('es-MX')}</text>
-</g>`;
-  }).join('');
-
-  ca.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
-<text x="${W-2}" y="12" text-anchor="end" font-size="9" fill="var(--tx3)">Ctrl+clic = multi</text>
-<line x1="${PL}" y1="${PT+BH}" x2="${W-PR}" y2="${PT+BH}" stroke="var(--bord2)" stroke-width="0.5"/>
-${cols}</svg>`;
-}
-
-
-// ══ GRÁFICA DÍAS DE INVENTARIO POR ALMACÉN ═══════════════════
-function renderChartDiasAlm(rows, almUniverse){
-  const ca=document.getElementById('chart-dias-alm');
-  if(!ca) return;
-  // Calcular días por almacén
-  const amSrc={};
-  for(const r of rows){
-    if(!amSrc[r.almacen])amSrc[r.almacen]={exist:0,diar:0};
-    amSrc[r.almacen].exist+=r.existencia;
-    amSrc[r.almacen].diar+=(r.consDiar||0);
+  // Tabla
+  const tbody = document.getElementById('tbody-1');
+  if (!arr.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;color:#aaa">Sin datos</td></tr>';
+    return;
   }
-  const allAlms=[...new Set(almUniverse.map(r=>r.almacen))].sort((a,b)=>{
-    const da=amSrc[a]&&amSrc[a].diar>0?amSrc[a].exist/amSrc[a].diar:0;
-    const db=amSrc[b]&&amSrc[b].diar>0?amSrc[b].exist/amSrc[b].diar:0;
-    return db-da||a.localeCompare(b);
-  });
-  const data=allAlms.map((alm,i)=>{
-    const s=amSrc[alm];
-    const dias=s&&s.diar>0?Math.round(s.exist/s.diar):null;
-    return{l:alm,v:dias,c:PAL[i%PAL.length]};
-  });
-  if(!data.length){ca.innerHTML='<p style="padding:16px;font-size:12px;color:var(--tx3)">Sin datos con consumo diario</p>';return;}
-  const maxV=Math.max(...data.map(d=>d.v||0),1);
-  const n=data.length;
-  // Dimensiones: ancho de columna se adapta al número de almacenes
-  const containerW=ca.offsetWidth||400;
-  const PL=8,PR=8,PT=24,PB=54,BH=100;
-  const availW=containerW-PL-PR;
-  const CW=Math.max(16,Math.min(40,Math.floor(availW/n)-4));
-  const GAP=Math.max(2,Math.min(6,Math.floor((availW-CW*n)/(n+1))));
-  const W=PL+(CW+GAP)*n+PR, H=BH+PT+PB;
-  // Tamaño de fuente autoajustable: menor si hay muchos almacenes
-  const fsLbl=Math.max(7,Math.min(10,Math.floor(CW*0.28)));
-  const fsSub=Math.max(6,Math.min(9,fsLbl-1));
-  const fsVal=Math.max(7,Math.min(10,fsLbl));
-  const cols=data.map((d,i)=>{
-    const bh=d.v!=null&&d.v>0?Math.max(Math.round(d.v/maxV*BH),3):0;
-    const x=PL+i*(CW+GAP), y=PT+(BH-bh);
-    const isEmpty=d.v==null||d.v===0;
-    const lbl=d.l.includes('–')?d.l.split('–')[0].trim():d.l.slice(0,5);
-    const sub=d.l.includes('–')?d.l.split('–')[1].trim():'';
-    // Truncar sub según ancho de columna (aprox 1 char = 5px)
-    const maxChars=Math.max(2,Math.floor(CW/fsSub*1.4));
-    const subTrunc=sub.length>maxChars?sub.slice(0,maxChars-1)+'…':sub;
-    const barEl=isEmpty
-      ?`<rect x="${x}" y="${PT+BH-1}" width="${CW}" height="2" rx="1" fill="${d.c}" opacity="0.2"/>`
-      :`<rect x="${x}" y="${y}" width="${CW}" height="${bh}" rx="3" fill="${d.c}" opacity=".85"/>`;
-    return `<g>
-<rect x="${x-2}" y="${PT}" width="${CW+4}" height="${BH+PB}" fill="transparent"/>
-${barEl}
-<text x="${x+CW/2}" y="${PT+BH+fsLbl+2}" text-anchor="middle" font-size="${fsLbl}" fill="${isEmpty?'var(--tx3)':'var(--tx2)'}">${lbl}</text>
-<text x="${x+CW/2}" y="${PT+BH+fsLbl+fsSub+4}" text-anchor="middle" font-size="${fsSub}" fill="var(--tx3)">${subTrunc}</text>
-<text x="${x+CW/2}" y="${y-4}" text-anchor="middle" font-size="${fsVal}" fill="${isEmpty?'var(--tx3)':'var(--tx2)'}">${isEmpty?'':d.v.toLocaleString('es-MX')}</text>
-</g>`;
-  }).join('');
-  ca.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
-<line x1="${PL}" y1="${PT+BH}" x2="${W-PR}" y2="${PT+BH}" stroke="var(--bord2)" stroke-width="0.5"/>
-${cols}</svg>`;
-}
-
-
-// ══ INTERACCIÓN BI ════════════════════════════════════════════
-// Al hacer clic en una barra, actualiza TAMBIÉN el filtro sidebar correspondiente
-
-function onBarTipo(evt,tipo){
-  // Ctrl+clic = multi-selección
-  if(evt.ctrlKey||evt.metaKey){
-    if(selTipos.has(tipo)) selTipos.delete(tipo); else selTipos.add(tipo);
-  } else {
-    if(selTipos.size===1&&selTipos.has(tipo)) selTipos.clear();
-    else { selTipos.clear(); selTipos.add(tipo); }
+  const stats = {};
+  for (const r of rows) {
+    if (!stats[r.tipo]) stats[r.tipo] = { tot:0, con:0, sin:0, exist:0 };
+    stats[r.tipo].tot++;
+    if (r.existencia > 0) { stats[r.tipo].con++; stats[r.tipo].exist += r.existencia; }
+    else stats[r.tipo].sin++;
   }
-  // Sincronizar con filtro sidebar MS.tipo si está en modo prev
-  if(modoRefac==='prev'){
-    if(selTipos.size===0){ MS.tipo.sel.clear(); msRender('tipo'); msBadge('tipo'); }
-    else if(selTipos.size===1){ msSetSingle('tipo',[...selTipos][0]); }
-    else{ msSetMultiple('tipo',[...selTipos]); }
-  }
-  // Sincronizar con filtro sidebar de Familia si está en modo corr
-  if(modoRefac==='corr'){
-    if(selTipos.size===0) MS.fam.sel.clear();
-    else if(selTipos.size===1) msSetSingle('fam',[...selTipos][0]);
-    else msSetMultiple('fam',[...selTipos]);
-  }
-  selRows.clear(); renderAll();
-}
-
-function onBarAlm(evt,el){
-  const alm=el.getAttribute('data-alm');
-  if(evt.ctrlKey||evt.metaKey){
-    if(selAlms.has(alm)) selAlms.delete(alm); else selAlms.add(alm);
-  } else {
-    if(selAlms.size===1&&selAlms.has(alm)) selAlms.clear();
-    else { selAlms.clear(); selAlms.add(alm); }
-  }
-  // Sincronizar con filtro sidebar de Almacén
-  if(selAlms.size===0) MS.alm.sel.clear();
-  else if(selAlms.size===1) msSetSingle('alm',[...selAlms][0]);
-  else msSetMultiple('alm',[...selAlms]);
-  selRows.clear(); renderAll();
-}
-
-function onRowClick(evt,key){
-  if(evt.ctrlKey||evt.metaKey){if(selRows.has(key))selRows.delete(key);else selRows.add(key);}
-  else{if(selRows.size===1&&selRows.has(key))selRows.clear();else{selRows.clear();selRows.add(key);}}
-  selTipos.clear(); selAlms.clear();
-  // Al limpiar BI de barras, resetear filtros sidebar que estaban coordinados
-  MS.alm.sel.clear(); msRender('alm'); msBadge('alm');
-  renderAll();
-}
-
-function clearBISelection(){
-  selTipos.clear(); selAlms.clear(); selRows.clear();
-  // Resetear filtros sidebar coordinados con BI
-  MS.alm.sel.clear(); msRender('alm'); msBadge('alm');
-  if(modoRefac==='prev'){ MS.tipo.sel.clear(); msRender('tipo'); msBadge('tipo'); }
-  if(modoRefac==='corr'){ MS.fam.sel.clear(); msRender('fam'); msBadge('fam'); }
-  renderAll();
-}
-
-function updateBIBadge(){
-  const badge=DOM['active-filter'], parts=[];
-  if(selTipos.size===1)parts.push([...selTipos][0]);
-  else if(selTipos.size>1)parts.push(selTipos.size+' tipos');
-  if(selAlms.size===1)parts.push([...selAlms][0]);
-  else if(selAlms.size>1)parts.push(selAlms.size+' almacenes');
-  if(selRows.size>0)parts.push(selRows.size+(selRows.size===1?' código':' códigos'));
-  badge.style.display=parts.length?'inline-block':'none';
-  if(parts.length)badge.textContent='✕ '+parts.join(' · ');
-}
-
-// ══ TABLAS ════════════════════════════════════════════════════
-let activeTab='det';
-function setActiveTab(t){
-  activeTab=t;
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll('.tc').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll(`.tab[data-t="${t}"]`).forEach(x=>x.classList.add('active'));
-  $('tc-'+t).classList.add('active');
-}
-
-function renderTables(rows,tableRows){
-  const disp=tableRows&&tableRows.length>0?tableRows:rows;
-  window._exportRows=disp;
-  const hasSel=selRows.size>0;
-  DOM['table-count'].textContent=rows.length+(hasSel?' ('+selRows.size+(selRows.size===1?' cód. sel.)':' cód. sel.)'):'')+ ' registros';
-  // Tabla detalle — máx 600 filas, usa innerHTML acumulado en array (join más rápido que concatenar)
-  const detParts=[];
-  const limit=Math.min(rows.length,600);
-  for(let i=0;i<limit;i++){
-    const r=rows[i];
-    const key=r.codigo, isSel=selRows.has(key), isDim=hasSel&&!isSel;
-    const cd=r.consDiar!=null?r.consDiar.toFixed(1):'—';
-    const di=r.diasInv!=null?Math.round(r.diasInv).toLocaleString('es-MX'):'—';
-    detParts.push(`<tr class="${isSel?'row-selected':isDim?'row-dimmed':''}" onclick="onRowClick(event,'${key.replace(/'/g,"\'")}')"><td><code style="font-size:11px;background:var(--surf2);padding:1px 4px;border-radius:3px">${r.codigo}</code></td><td title="${r.desc}">${r.desc||'—'}</td><td><span class="badge ${badgeClass(r.tipo)}">${r.tipo}</span></td><td>${r.almacen}</td><td><span style="font-size:11px;color:var(--tx2)">${r.clasif||'—'}</span></td><td><span style="font-size:11px;color:var(--tx2)">${r.tnec||'—'}</span></td><td style="text-align:right"><span class="badge ${r.existencia>0?'b-green':'b-red'}">${r.existencia.toLocaleString('es-MX')}</span></td><td style="text-align:right;font-size:12px">${cd}</td><td style="text-align:right;font-size:12px">${di}</td></tr>`);
-  }
-  DOM['tb-det'].innerHTML=detParts.join('');
-  // Resumen por tipo — un solo loop
-  const rm={};
-  for(const r of rows){
-    if(!rm[r.tipo])rm[r.tipo]={tot:0,con:0,sin:0,exist:0,sumDiar:0};
-    rm[r.tipo].tot++;
-    rm[r.tipo].sumDiar+=(r.consDiar||0);
-    if(r.existencia>0){rm[r.tipo].con++;rm[r.tipo].exist+=r.existencia;}else rm[r.tipo].sin++;
-  }
-  DOM['tb-res'].innerHTML=Object.entries(rm)
-    .sort((a,b)=>{if(a[0]==='Sin clasificar')return 1;if(b[0]==='Sin clasificar')return -1;return b[1].exist-a[1].exist;})
-    .map(([tipo,d])=>{
-      const pct=d.tot?Math.round(d.con/d.tot*100):0;
-      const fc=pct>=80?'#2d6a0f':pct>=40?'#7a4800':'#a32d2d';
-      const isSel=selRows.size>0&&[...selRows].some(k=>k.split('||')[0]==='__tipo__'+tipo);
-      const tcd=d.sumDiar>0?d.sumDiar.toFixed(1):'—';
-      const tdi=d.sumDiar>0?Math.round(d.exist/d.sumDiar).toLocaleString('es-MX'):'—';
-      return `<tr class="${isSel?'row-selected':''}" style="${tipo==='Sin clasificar'?'background:var(--amber-bg)':''}" onclick="onTipoRowClick(event,'${tipo.replace(/'/g,"\'")}')"><td><span class="badge ${badgeClass(tipo)}">${tipo}</span></td><td style="text-align:right;font-weight:600">${d.tot}</td><td style="text-align:right;color:var(--green)">${d.con}</td><td style="text-align:right;color:var(--red)">${d.sin}</td><td><div class="prog"><div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${fc}"></div></div><span class="prog-val">${pct}%</span></div></td><td style="text-align:right">${d.exist.toLocaleString('es-MX')}</td><td style="text-align:right;font-size:12px">${tcd}</td><td style="text-align:right;font-size:12px">${tdi}</td></tr>`;
-    }).join('');
-  // Por almacén — un solo loop
-  const am={};
-  for(const r of rows){
-    const k=r.almacen+'||'+r.tipo;
-    if(!am[k])am[k]={alm:r.almacen,tipo:r.tipo,cnt:0,exist:0,sumDiar:0};
-    am[k].cnt++;am[k].exist+=r.existencia;am[k].sumDiar+=(r.consDiar||0);
-  }
-  DOM['tb-alm'].innerHTML=Object.values(am)
-    .sort((a,b)=>a.alm.localeCompare(b.alm)||b.exist-a.exist)
-    .map(e=>{
-      const isSel=selAlms.has(e.alm)||selTipos.has(e.tipo);
-      const acd=e.sumDiar>0?e.sumDiar.toFixed(1):'—';
-      const adi=e.sumDiar>0?Math.round(e.exist/e.sumDiar).toLocaleString('es-MX'):'—';
-      return `<tr class="${isSel?'row-selected':''}" onclick="onAlmRowClick(event,'${e.alm.replace(/'/g,"\'")}','${e.tipo.replace(/'/g,"\'")}')"><td style="font-weight:500">${e.alm}</td><td><span class="badge ${badgeClass(e.tipo)}">${e.tipo}</span></td><td style="text-align:right">${e.cnt}</td><td style="text-align:right">${e.exist.toLocaleString('es-MX')}</td><td style="text-align:right;font-size:12px">${acd}</td><td style="text-align:right;font-size:12px">${adi}</td></tr>`;
+  tbody.innerHTML = Object.entries(stats)
+    .sort((a,b) => b[1].exist - a[1].exist)
+    .map(([tipo,d]) => {
+      const pct = d.tot ? (d.con/d.tot*100).toFixed(1) : 0;
+      const color = pct >= 80 ? '#00B050' : pct >= 40 ? '#FFC000' : '#FF0000';
+      return `<tr>
+        <td class="label-col">${tipo}</td>
+        <td>${d.tot.toLocaleString('es-MX')}</td>
+        <td style="color:#00B050;font-weight:600">${d.con.toLocaleString('es-MX')}</td>
+        <td style="color:#FF0000;font-weight:600">${d.sin.toLocaleString('es-MX')}</td>
+        <td style="color:${color};font-weight:700">${pct}%</td>
+        <td style="font-weight:600">${d.exist.toLocaleString('es-MX')}</td>
+      </tr>`;
     }).join('');
 }
 
-// Clics en filas de resumen → activan filtro BI en gráficas
-function onTipoRowClick(evt,tipo){
-  if(evt.ctrlKey||evt.metaKey){if(selTipos.has(tipo))selTipos.delete(tipo);else selTipos.add(tipo);}
-  else{if(selTipos.size===1&&selTipos.has(tipo))selTipos.clear();else{selTipos.clear();selTipos.add(tipo);}}
-  selRows.clear();selAlms.clear();renderAll();
-}
-function onAlmRowClick(evt,alm,tipo){
-  if(evt.ctrlKey||evt.metaKey){if(selAlms.has(alm))selAlms.delete(alm);else selAlms.add(alm);}
-  else{if(selAlms.size===1&&selAlms.has(alm))selAlms.clear();else{selAlms.clear();selAlms.add(alm);}}
-  selRows.clear();renderAll();
-}
+// ============================================================
+// PANEL 2: EXISTENCIAS POR ALMACÉN
+// ============================================================
+function renderPanel2() {
+  const rows = aplicarFiltros(DATA);
+  const agg = {};
+  for (const r of rows) agg[r.almacen] = (agg[r.almacen]||0) + r.existencia;
+  const arr = Object.entries(agg).sort((a,b) => b[1]-a[1]);
 
-// ══ EXPORTAR ALMACÉN ═════════════════════════════════════════
-function exportAlmacenExcel(){
-  const rows=window._almExportRows||[];
-  if(!rows.length){alert('No hay datos para exportar.');return;}
-  const fecha=new Date().toISOString().slice(0,10);
-  const wb=XLSX.utils.book_new();
-  const resMap={};
-  for(const r of rows){
-    if(!resMap[r.almacen])resMap[r.almacen]={'Almacén':r.almacen,'Materiales':0,'Con Existencia':0,'Sin Existencia':0,'Total Existencias':0};
-    resMap[r.almacen]['Materiales']++;
-    if(r.existencia>0)resMap[r.almacen]['Con Existencia']++;else resMap[r.almacen]['Sin Existencia']++;
-    resMap[r.almacen]['Total Existencias']+=r.existencia;
+  // KPIs
+  const total = arr.reduce((a,[,v]) => a+v, 0);
+  document.getElementById('kpi-alm-count').textContent = arr.length;
+  document.getElementById('kpi-alm-exist').textContent = total.toLocaleString('es-MX');
+  document.getElementById('kpi-alm-prom').textContent = arr.length ? Math.round(total/arr.length).toLocaleString('es-MX') : '—';
+  if (arr.length) {
+    const [topAlm, topVal] = arr[0];
+    document.getElementById('kpi-alm-max').textContent = topAlm.length > 18 ? topAlm.slice(0,17) + '…' : topAlm;
+    document.getElementById('kpi-alm-max-val').textContent = topVal.toLocaleString('es-MX') + ' piezas';
+  } else {
+    document.getElementById('kpi-alm-max').textContent = '—';
+    document.getElementById('kpi-alm-max-val').textContent = '—';
   }
-  const res=Object.values(resMap).sort((a,b)=>b['Total Existencias']-a['Total Existencias']);
-  res.push({'Almacén':'TOTAL','Materiales':res.reduce((s,r)=>s+r['Materiales'],0),'Con Existencia':res.reduce((s,r)=>s+r['Con Existencia'],0),'Sin Existencia':res.reduce((s,r)=>s+r['Sin Existencia'],0),'Total Existencias':res.reduce((s,r)=>s+r['Total Existencias'],0)});
-  const wsR=XLSX.utils.json_to_sheet(res);wsR['!cols']=[{wch:28},{wch:14},{wch:16},{wch:16},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,wsR,'Resumen por Almacén');
-  const det=rows.sort((a,b)=>a.almacen.localeCompare(b.almacen)||b.existencia-a.existencia).map(r=>({'Almacén':r.almacen,'Código':r.codigo,'Descripción':r.desc,'Tipo Mantenimiento':r.tipo,'Clasificación':r.clasif||'','Familia':r.familia||'','Existencias':r.existencia}));
-  const wsD=XLSX.utils.json_to_sheet(det);wsD['!cols']=[{wch:24},{wch:18},{wch:38},{wch:24},{wch:18},{wch:20},{wch:14}];
-  XLSX.utils.book_append_sheet(wb,wsD,'Detalle por Almacén');
-  XLSX.writeFile(wb,'Existencias_Almacen_'+fecha+'.xlsx');
-}
 
-// ══ EXPORTAR TABLAS ══════════════════════════════════════════
-function exportTabla(tab){
-  const rows=window._exportRows||[];
-  if(!rows.length){alert('No hay datos.');return;}
-  const fecha=new Date().toISOString().slice(0,10);
-  const wb=XLSX.utils.book_new();
-  if(tab==='det'){
-    const ws=XLSX.utils.json_to_sheet(rows.map(r=>({'Código':r.codigo,'Descripción':r.desc,'Tipo Mantenimiento':r.tipo,'Almacén':r.almacen,'Clasificación':r.clasif||'','Familia':r.familia||'','Existencias':r.existencia})));
-    ws['!cols']=[{wch:20},{wch:40},{wch:24},{wch:22},{wch:18},{wch:20},{wch:14}];
-    XLSX.utils.book_append_sheet(wb,ws,'Por Material');
-    XLSX.writeFile(wb,'Detalle_Materiales_'+fecha+'.xlsx');
-  } else if(tab==='res'){
-    const rm={};
-    for(const r of rows){if(!rm[r.tipo])rm[r.tipo]={tot:0,con:0,sin:0,exist:0};rm[r.tipo].tot++;if(r.existencia>0){rm[r.tipo].con++;rm[r.tipo].exist+=r.existencia;}else rm[r.tipo].sin++;}
-    const rd=Object.entries(rm).sort((a,b)=>{if(a[0]==='Sin clasificar')return 1;if(b[0]==='Sin clasificar')return -1;return b[1].exist-a[1].exist;}).map(([t,d])=>({'Tipo':t,'Total':d.tot,'Con Existencia':d.con,'Sin Existencia':d.sin,'Cobertura %':d.tot?Math.round(d.con/d.tot*100):0,'Total Existencias':d.exist}));
-    rd.push({'Tipo':'TOTAL','Total':rd.reduce((s,r)=>s+r['Total'],0),'Con Existencia':rd.reduce((s,r)=>s+r['Con Existencia'],0),'Sin Existencia':rd.reduce((s,r)=>s+r['Sin Existencia'],0),'Cobertura %':'','Total Existencias':rd.reduce((s,r)=>s+(r['Total Existencias']||0),0)});
-    const ws1=XLSX.utils.json_to_sheet(rd);ws1['!cols']=[{wch:28},{wch:10},{wch:16},{wch:16},{wch:14},{wch:20}];
-    XLSX.utils.book_append_sheet(wb,ws1,'Resumen por Tipo');
-    const wd=rows.sort((a,b)=>a.tipo.localeCompare(b.tipo)||b.existencia-a.existencia).map(r=>({'Tipo':r.tipo,'Código':r.codigo,'Descripción':r.desc,'Almacén':r.almacen,'Clasificación':r.clasif||'','Familia':r.familia||'','Existencias':r.existencia}));
-    const ws2=XLSX.utils.json_to_sheet(wd);ws2['!cols']=[{wch:26},{wch:20},{wch:40},{wch:22},{wch:18},{wch:20},{wch:14}];
-    XLSX.utils.book_append_sheet(wb,ws2,'Detalle por Tipo');
-    XLSX.writeFile(wb,'Inventario_Por_Tipo_'+fecha+'.xlsx');
-  } else if(tab==='alm'){
-    const am={};
-    for(const r of rows){const k=r.almacen+'||'+r.tipo;if(!am[k])am[k]={alm:r.almacen,tipo:r.tipo,cnt:0,con:0,sin:0,exist:0};am[k].cnt++;if(r.existencia>0){am[k].con++;am[k].exist+=r.existencia;}else am[k].sin++;}
-    const ad=Object.values(am).sort((a,b)=>a.alm.localeCompare(b.alm)||b.exist-a.exist).map(e=>({'Almacén':e.alm,'Tipo':e.tipo,'Total':e.cnt,'Con Existencia':e.con,'Sin Existencia':e.sin,'Total Existencias':e.exist}));
-    ad.push({'Almacén':'TOTAL','Tipo':'','Total':ad.reduce((s,r)=>s+r['Total'],0),'Con Existencia':ad.reduce((s,r)=>s+r['Con Existencia'],0),'Sin Existencia':ad.reduce((s,r)=>s+r['Sin Existencia'],0),'Total Existencias':ad.reduce((s,r)=>s+(r['Total Existencias']||0),0)});
-    const ws1=XLSX.utils.json_to_sheet(ad);ws1['!cols']=[{wch:24},{wch:26},{wch:10},{wch:16},{wch:16},{wch:20}];
-    XLSX.utils.book_append_sheet(wb,ws1,'Resumen por Almacén');
-    const dd=rows.sort((a,b)=>a.almacen.localeCompare(b.almacen)||a.tipo.localeCompare(b.tipo)||b.existencia-a.existencia).map(r=>({'Almacén':r.almacen,'Tipo':r.tipo,'Código':r.codigo,'Descripción':r.desc,'Clasificación':r.clasif||'','Familia':r.familia||'','Existencias':r.existencia}));
-    const ws2=XLSX.utils.json_to_sheet(dd);ws2['!cols']=[{wch:22},{wch:26},{wch:20},{wch:40},{wch:18},{wch:20},{wch:14}];
-    XLSX.utils.book_append_sheet(wb,ws2,'Detalle por Almacén');
-    XLSX.writeFile(wb,'Inventario_Por_Almacen_'+fecha+'.xlsx');
+  // Gráfica de columnas verticales
+  const labels = arr.map(([l]) => l.length > 18 ? l.slice(0,16) + '…' : l);
+  const data = arr.map(([,v]) => v);
+
+  destroyChart(2);
+  const ctx = document.getElementById('chart-2').getContext('2d');
+  chartInstances[2] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Existencias',
+        data,
+        backgroundColor: '#0070C0',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: ctx => arr[ctx[0].dataIndex][0],
+            label: c => c.parsed.y.toLocaleString('es-MX') + ' piezas'
+          }
+        },
+        datalabels: {
+          anchor: 'end', align: 'top',
+          color: '#333',
+          font: { size: 9, weight: 'bold' },
+          formatter: v => v.toLocaleString('es-MX')
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 9 }, autoSkip: false, maxRotation: 60, minRotation: 45 } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('es-MX') } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+
+  // Tabla
+  const tbody = document.getElementById('tbody-2');
+  if (!arr.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="padding:40px;color:#aaa">Sin datos</td></tr>';
+    return;
   }
+  // contar materiales por almacén
+  const matCount = {};
+  for (const r of rows) matCount[r.almacen] = (matCount[r.almacen]||0)+1;
+  tbody.innerHTML = arr.map(([alm,exist]) => {
+    const pct = total ? (exist/total*100).toFixed(2) : 0;
+    return `<tr>
+      <td class="label-col">${alm}</td>
+      <td>${(matCount[alm]||0).toLocaleString('es-MX')}</td>
+      <td style="font-weight:600">${exist.toLocaleString('es-MX')}</td>
+      <td style="color:#0070C0;font-weight:600">${pct}%</td>
+    </tr>`;
+  }).join('');
 }
 
-// ══ EVENTOS ══════════════════════════════════════════════════
-['f-tipo','f-exist'].forEach(id=>{
-  const el=$(id);
-  if(el) el.addEventListener('change',()=>{ if(allClas.length||allSC.length) applyFilters(); });
-});
-// Búsqueda con debounce (200ms) — usa el mismo timer que scheduleFilter
-$('search').addEventListener('input',()=>{
-  clearTimeout(_filterTimer);
-  _filterTimer=setTimeout(()=>{ if(allClas.length) applyFilters(); }, 200);
-});
+// ============================================================
+// PANEL 3: DÍAS DE INVENTARIO POR ALMACÉN
+// ============================================================
+function renderPanel3() {
+  const rows = aplicarFiltros(DATA).filter(r => r.dias !== null && r.existencia > 0);
 
-init();
+  // Agrupar por almacén — promedio ponderado por existencia
+  const agg = {};
+  for (const r of rows) {
+    if (!agg[r.almacen]) agg[r.almacen] = { sumDxE:0, sumE:0, n:0, min:Infinity, max:-Infinity };
+    agg[r.almacen].sumDxE += r.dias * r.existencia;
+    agg[r.almacen].sumE   += r.existencia;
+    agg[r.almacen].n++;
+    if (r.dias < agg[r.almacen].min) agg[r.almacen].min = r.dias;
+    if (r.dias > agg[r.almacen].max) agg[r.almacen].max = r.dias;
+  }
+
+  const arr = Object.entries(agg)
+    .map(([alm,d]) => ({
+      alm,
+      prom: d.sumE > 0 ? d.sumDxE/d.sumE : 0,
+      n: d.n,
+      min: d.min === Infinity ? 0 : d.min,
+      max: d.max === -Infinity ? 0 : d.max
+    }))
+    .sort((a,b) => b.prom - a.prom);
+
+  // KPIs
+  if (!arr.length) {
+    document.getElementById('kpi-di-prom').textContent = '—';
+    document.getElementById('kpi-di-max').textContent = '—';
+    document.getElementById('kpi-di-max-alm').textContent = '—';
+    document.getElementById('kpi-di-min').textContent = '—';
+    document.getElementById('kpi-di-min-alm').textContent = '—';
+    document.getElementById('kpi-di-count').textContent = '0';
+    destroyChart(3);
+    document.getElementById('tbody-3').innerHTML = '<tr><td colspan="5" style="padding:40px;color:#aaa">Sin datos de Días de Inventario disponibles</td></tr>';
+    return;
+  }
+  const totalE  = arr.reduce((a,x) => a + (agg[x.alm].sumE),0);
+  const totalDxE= arr.reduce((a,x) => a + (agg[x.alm].sumDxE),0);
+  const promGral = totalE ? totalDxE/totalE : 0;
+  const maxItem = arr[0];
+  const minItem = [...arr].sort((a,b) => a.prom - b.prom)[0];
+  document.getElementById('kpi-di-prom').textContent = promGral.toFixed(1);
+  document.getElementById('kpi-di-max').textContent = maxItem.prom.toFixed(1);
+  document.getElementById('kpi-di-max-alm').textContent = maxItem.alm;
+  document.getElementById('kpi-di-min').textContent = minItem.prom.toFixed(1);
+  document.getElementById('kpi-di-min-alm').textContent = minItem.alm;
+  document.getElementById('kpi-di-count').textContent = arr.length;
+
+  // Gráfica de barras verticales con colores semáforo
+  const labels = arr.map(x => x.alm.length > 18 ? x.alm.slice(0,16)+'…' : x.alm);
+  const data   = arr.map(x => +x.prom.toFixed(1));
+  const colors = arr.map(x => x.prom >= 90 ? '#FF0000' : x.prom >= 30 ? '#FFC000' : '#00B050');
+
+  destroyChart(3);
+  const ctx = document.getElementById('chart-3').getContext('2d');
+  chartInstances[3] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Días de Inventario',
+        data,
+        backgroundColor: colors,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: ctx => arr[ctx[0].dataIndex].alm,
+            label: c => c.parsed.y.toFixed(1) + ' días'
+          }
+        },
+        datalabels: {
+          anchor: 'end', align: 'top',
+          color: '#333',
+          font: { size: 9, weight: 'bold' },
+          formatter: v => v.toFixed(1)
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 9 }, autoSkip: false, maxRotation: 60, minRotation: 45 } },
+        y: { beginAtZero: true, title: { display: true, text: 'Días', font: { size: 10, weight: 'bold' } }, ticks: { font: { size: 10 } } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+
+  // Tabla
+  document.getElementById('tbody-3').innerHTML = arr.map(x => {
+    const color = x.prom >= 90 ? '#FF0000' : x.prom >= 30 ? '#FFC000' : '#00B050';
+    return `<tr>
+      <td class="label-col">${x.alm}</td>
+      <td>${x.n.toLocaleString('es-MX')}</td>
+      <td style="color:${color};font-weight:700">${x.prom.toFixed(1)}</td>
+      <td>${x.min.toFixed(1)}</td>
+      <td>${x.max.toFixed(1)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// DESCARGA EXCEL
+// ============================================================
+function descargarExcel(panel) {
+  const table = document.getElementById(`tabla-${panel}`);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.table_to_sheet(table);
+  const sheetName = panel === 1 ? 'Tipo Mantenimiento' : panel === 2 ? 'Por Almacén' : 'Días Inventario';
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const ts = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Inventario_${sheetName.replace(/ /g,'_')}_${ts}.xlsx`);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+cargarDatos();
 </script>
 </body>
 </html>
