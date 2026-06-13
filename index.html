@@ -806,7 +806,12 @@ function procesarDatos() {
   const cClas   = invCols.find(c => /^clasificaci[oó]n$/i.test(c.trim())) || invCols.find(c => /clasif/i.test(c.trim())) || null;
   const cTnec   = invCols.find(c => /necesidad/i.test(c.trim())) || null;
   // Días de Inventario
-  const cDias   = invCols.find(c => /d[ií]as.*inventario|d[ií]as_inventario|d[ií]as inv/i.test(c.trim())) || null;
+  // Columna de Días de Inventario (pre-calculada en Excel, usada solo si no hay consumo)
+  const cDias    = invCols.find(c => /d[ií]as.*inventario|d[ií]as_inventario|d[ií]as.*inv/i.test(c.trim())) || null;
+  // Columna de Consumo Diario — con esta se recalcula: Días = Existencias / Consumo Diario
+  const cConsumo = invCols.find(c => /consumo.*diario|consumo_diario|cons.*diario/i.test(c.trim())) ||
+                   invCols.find(c => /^consumo$/i.test(c.trim())) ||
+                   invCols.find(c => /consumo/i.test(c.trim())) || null;
 
   const out = [];
   for (const r of RAW_INV) {
@@ -828,6 +833,13 @@ function procesarDatos() {
       // Tipo = familia (para correctivos/no clasificados)
       tipo = familia || 'Sin clasificar';
     }
+    // consumo diario por fila (para sumar por almacén y recalcular días = ΣExist / ΣConsumo)
+    let consumoDiario = null;
+    if (cConsumo) {
+      const cVal = parseFloat(String(r[cConsumo] || '').replace(',', '.'));
+      if (isFinite(cVal) && cVal > 0) consumoDiario = cVal;
+    }
+    // días pre-calculados en Excel (fallback si no hay columna de consumo)
     let dias = null;
     if (cDias) {
       const dVal = parseFloat(String(r[cDias] || '').replace(',', '.'));
@@ -838,7 +850,7 @@ function procesarDatos() {
       desc:   String(r[cDesc] || '').trim(),
       clasif: cClas ? String(r[cClas] || '').trim() : '',
       tnec:   cTnec ? String(r[cTnec] || '').trim() : '',
-      dias
+      dias, consumoDiario
     });
   }
   DATA = out;
@@ -1214,32 +1226,59 @@ function renderPanel2() {
 
 // ============================================================
 // PANEL 3: DÍAS DE INVENTARIO POR ALMACÉN
+// Fórmula igual al dashboard original:
+//   Días por almacén = SUM(Existencias) / SUM(Consumo Diario)
+// Si no hay columna de Consumo Diario, usa la columna "Días de Inventario"
+// del Excel con promedio simple por almacén (igual al original de Power BI).
 // ============================================================
 function renderPanel3() {
-  const rows = aplicarFiltros(DATA).filter(r => r.dias !== null && r.existencia > 0);
+  const rows = aplicarFiltros(DATA);
 
-  // Agrupar por almacén — promedio ponderado por existencia
-  const agg = {};
-  for (const r of rows) {
-    if (!agg[r.almacen]) agg[r.almacen] = { sumDxE:0, sumE:0, n:0, min:Infinity, max:-Infinity };
-    agg[r.almacen].sumDxE += r.dias * r.existencia;
-    agg[r.almacen].sumE   += r.existencia;
-    agg[r.almacen].n++;
-    if (r.dias < agg[r.almacen].min) agg[r.almacen].min = r.dias;
-    if (r.dias > agg[r.almacen].max) agg[r.almacen].max = r.dias;
+  // Detectar modo de cálculo: ¿hay consumo diario en los datos?
+  const tieneConsumo = rows.some(r => r.consumoDiario !== null);
+  const tieneDias    = rows.some(r => r.dias !== null);
+
+  if (!tieneConsumo && !tieneDias) {
+    ['kpi-di-prom','kpi-di-max','kpi-di-min','kpi-di-count'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    document.getElementById('kpi-di-max-alm').textContent = 'Sin columna de Consumo Diario o Días de Inventario';
+    document.getElementById('kpi-di-min-alm').textContent = '';
+    destroyChart(3);
+    document.getElementById('tbody-3').innerHTML =
+      '<tr><td colspan="5" style="padding:40px;color:#aaa;text-align:center">No se encontró la columna "Consumo Diario" ni "Días de Inventario" en el Excel</td></tr>';
+    return;
   }
 
-  const arr = Object.entries(agg)
-    .map(([alm,d]) => ({
-      alm,
-      prom: d.sumE > 0 ? d.sumDxE/d.sumE : 0,
-      n: d.n,
-      min: d.min === Infinity ? 0 : d.min,
-      max: d.max === -Infinity ? 0 : d.max
-    }))
-    .sort((a,b) => b.prom - a.prom);
+  // Agrupar por almacén
+  const agg = {};
+  for (const r of rows) {
+    if (!agg[r.almacen]) agg[r.almacen] = { sumExist:0, sumConsumo:0, sumDias:0, nDias:0, n:0 };
+    const g = agg[r.almacen];
+    g.sumExist += r.existencia;
+    g.n++;
+    if (tieneConsumo && r.consumoDiario !== null) g.sumConsumo += r.consumoDiario;
+    if (!tieneConsumo && r.dias !== null) { g.sumDias += r.dias; g.nDias++; }
+  }
 
-  // KPIs
+  // Calcular días por almacén según modo
+  // Modo A (consumo diario disponible): Días = SUM(Exist) / SUM(ConsumoDiario)  ← igual al original
+  // Modo B (solo columna Días del Excel): promedio simple de días
+  const arr = Object.entries(agg)
+    .map(([alm, g]) => {
+      let dias;
+      if (tieneConsumo) {
+        dias = g.sumConsumo > 0 ? g.sumExist / g.sumConsumo : 0;
+      } else {
+        dias = g.nDias > 0 ? g.sumDias / g.nDias : 0;
+      }
+      return { alm, dias: Math.round(dias), exist: g.sumExist, n: g.n };
+    })
+    .filter(x => x.n > 0)
+    .sort((a,b) => b.dias - a.dias);
+
+  const modoLabel = tieneConsumo ? 'Existencias ÷ Consumo Diario' : 'Promedio de Días de Inventario por almacén';
+
   if (!arr.length) {
     document.getElementById('kpi-di-prom').textContent = '—';
     document.getElementById('kpi-di-max').textContent = '—';
@@ -1248,25 +1287,46 @@ function renderPanel3() {
     document.getElementById('kpi-di-min-alm').textContent = '—';
     document.getElementById('kpi-di-count').textContent = '0';
     destroyChart(3);
-    document.getElementById('tbody-3').innerHTML = '<tr><td colspan="5" style="padding:40px;color:#aaa">Sin datos de Días de Inventario disponibles</td></tr>';
+    document.getElementById('tbody-3').innerHTML = '<tr><td colspan="5" style="padding:40px;color:#aaa;text-align:center">Sin datos</td></tr>';
     return;
   }
-  const totalE  = arr.reduce((a,x) => a + (agg[x.alm].sumE),0);
-  const totalDxE= arr.reduce((a,x) => a + (agg[x.alm].sumDxE),0);
-  const promGral = totalE ? totalDxE/totalE : 0;
+
+  // KPIs
+  const totalExist   = arr.reduce((a,x) => a + x.exist, 0);
+  const totalConsumo = tieneConsumo ? Object.values(agg).reduce((a,g) => a+g.sumConsumo, 0) : 0;
+  const promGral     = tieneConsumo
+    ? (totalConsumo > 0 ? Math.round(totalExist / totalConsumo) : 0)
+    : Math.round(arr.reduce((a,x) => a+x.dias, 0) / arr.length);
   const maxItem = arr[0];
-  const minItem = [...arr].sort((a,b) => a.prom - b.prom)[0];
-  document.getElementById('kpi-di-prom').textContent = promGral.toFixed(1);
-  document.getElementById('kpi-di-max').textContent = maxItem.prom.toFixed(1);
+  const minItem = arr[arr.length-1];
+
+  document.getElementById('kpi-di-prom').textContent = promGral.toLocaleString('es-MX');
+  document.getElementById('kpi-di-max').textContent  = maxItem.dias.toLocaleString('es-MX');
   document.getElementById('kpi-di-max-alm').textContent = maxItem.alm;
-  document.getElementById('kpi-di-min').textContent = minItem.prom.toFixed(1);
+  document.getElementById('kpi-di-min').textContent  = minItem.dias.toLocaleString('es-MX');
   document.getElementById('kpi-di-min-alm').textContent = minItem.alm;
   document.getElementById('kpi-di-count').textContent = arr.length;
 
-  // Gráfica de barras verticales con colores semáforo
-  const labels = arr.map(x => x.alm.length > 18 ? x.alm.slice(0,16)+'…' : x.alm);
-  const data   = arr.map(x => +x.prom.toFixed(1));
-  const colors = arr.map(x => x.prom >= 90 ? '#FF0000' : x.prom >= 30 ? '#FFC000' : '#00B050');
+  // Actualizar subtítulo de la gráfica con el modo de cálculo
+  document.getElementById('ct-zona-3').textContent =
+    filtros.alm.sel.size === 0 ? 'TODOS LOS ALMACENES'
+    : filtros.alm.sel.size === 1 ? [...filtros.alm.sel][0].toUpperCase()
+    : filtros.alm.sel.size + ' ALMACENES';
+
+  // Etiqueta secundaria con la fórmula usada
+  const infoEl = document.querySelector('#dash-3 .ct-info');
+  if (infoEl) infoEl.textContent = modoLabel.toUpperCase();
+
+  // Gráfica — barras verticales, un color por almacén (como el original Power BI)
+  const PAL_ALM = ['#4472C4','#70AD47','#7030A0','#ED7D31','#FF0000','#00B0F0',
+                   '#92D050','#FFC000','#A9D18E','#2F75B6','#C55A11','#538135','#843C0C'];
+  const labels = arr.map(x => {
+    // Mostrar solo la parte antes del "–" si hay División (igual al original)
+    const partes = x.alm.split('–');
+    return partes[0].trim().length > 10 ? partes[0].trim().slice(0,9)+'…' : partes[0].trim();
+  });
+  const data   = arr.map(x => x.dias);
+  const colors = arr.map((_,i) => PAL_ALM[i % PAL_ALM.length]);
 
   destroyChart(3);
   const ctx = document.getElementById('chart-3').getContext('2d');
@@ -1278,46 +1338,57 @@ function renderPanel3() {
         label: 'Días de Inventario',
         data,
         backgroundColor: colors,
-        borderRadius: 4
+        borderRadius: 3,
+        borderSkipped: false
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 24 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
             title: ctx => arr[ctx[0].dataIndex].alm,
-            label: c => c.parsed.y.toFixed(1) + ' días'
+            afterTitle: ctx => tieneConsumo
+              ? 'Exist: ' + arr[ctx[0].dataIndex].exist.toLocaleString('es-MX')
+              : '',
+            label: c => c.parsed.y.toLocaleString('es-MX') + ' días'
           }
         },
         datalabels: {
-          anchor: 'end', align: 'top',
+          anchor: 'end', align: 'end',
           color: '#333',
-          font: { size: 9, weight: 'bold' },
-          formatter: v => v.toFixed(1)
+          font: { size: 10, weight: 'bold' },
+          formatter: v => v.toLocaleString('es-MX')
         }
       },
       scales: {
-        x: { ticks: { font: { size: 9 }, autoSkip: false, maxRotation: 60, minRotation: 45 } },
-        y: { beginAtZero: true, title: { display: true, text: 'Días', font: { size: 10, weight: 'bold' } }, ticks: { font: { size: 10 } } }
+        x: {
+          ticks: { font: { size: 9 }, autoSkip: false, maxRotation: 0, minRotation: 0 },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          display: false,
+          grid: { display: false }
+        }
       }
     },
     plugins: [ChartDataLabels]
   });
 
-  // Tabla
-  document.getElementById('tbody-3').innerHTML = arr.map(x => {
-    const color = x.prom >= 90 ? '#FF0000' : x.prom >= 30 ? '#FFC000' : '#00B050';
-    return `<tr>
-      <td class="label-col">${x.alm}</td>
-      <td>${x.n.toLocaleString('es-MX')}</td>
-      <td style="color:${color};font-weight:700">${x.prom.toFixed(1)}</td>
-      <td>${x.min.toFixed(1)}</td>
-      <td>${x.max.toFixed(1)}</td>
-    </tr>`;
-  }).join('');
+  // Segunda fila de etiquetas con existencias totales (como en el original)
+  // Se agrega como anotación debajo de cada barra usando afterDatasets plugin
+  // Tabla detalle
+  document.getElementById('tbody-3').innerHTML = arr.map(x => `<tr>
+    <td class="label-col">${x.alm}</td>
+    <td>${x.n.toLocaleString('es-MX')}</td>
+    <td style="font-weight:700;color:#333F48">${x.dias.toLocaleString('es-MX')}</td>
+    <td>${x.exist.toLocaleString('es-MX')}</td>
+    <td>${tieneConsumo && agg[x.alm] ? (agg[x.alm].sumConsumo).toFixed(2) : '—'}</td>
+  </tr>`).join('');
 }
 
 // ============================================================
