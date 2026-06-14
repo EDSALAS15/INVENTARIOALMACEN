@@ -710,735 +710,433 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
-// ============================================================
-// ESTADO GLOBAL
-// ============================================================
-// Registrar plugin de datalabels globalmente en Chart.js
-if (typeof ChartDataLabels !== 'undefined') {
-  Chart.register(ChartDataLabels);
-}
+// ══ REGISTRO GLOBAL DE PLUGINS ═══════════════════════════════
+if(typeof ChartDataLabels!=='undefined') Chart.register(ChartDataLabels);
 
-const RAW_URL = 'https://raw.githubusercontent.com/EDSALAS15/Inventario-Refacciones-Citi/main/InventarioAlmacen.xlsx';
-let RAW_INV = [];   // Filas de hoja InventarioAlmacen
-let RAW_MP  = [];   // Filas catálogo MP
-let DATA    = [];   // Filas procesadas {codigo, desc, almacen, existencia, tipo, clasif, tnec, dias}
-let chartInstances = { 1:null, 2:null, 3:null };
+// ══ CONSTANTES Y ESTADO ══════════════════════════════════════
+const RAW_URL='https://raw.githubusercontent.com/EDSALAS15/Inventario-Refacciones-Citi/main/InventarioAlmacen.xlsx';
+const FILTER_KEYS=['refac','alm','tipo','exist','clas','tnec'];
+const FMT=v=>v.toLocaleString('es-MX');
 
-// Filtros (Set vacío = todos)
-const filtros = {
-  refac: { sel: new Set(), opts: ['Preventivos','Correctivos'] },  // clasificación por catálogo MP
-  alm:   { sel: new Set(), opts: [] },
-  tipo:  { sel: new Set(), opts: [] },
-  exist: { sel: new Set(), opts: ['Con existencia','Sin existencia'] },
-  clas:  { sel: new Set(), opts: [] },
-  tnec:  { sel: new Set(), opts: [] }
+let RAW_INV=[], RAW_MP=[], DATA=[];
+let chartInstances={1:null,2:null,3:null};
+
+const filtros={
+  refac:{sel:new Set(),opts:['Preventivos','Correctivos']},
+  alm:  {sel:new Set(),opts:[]},
+  tipo: {sel:new Set(),opts:[]},
+  exist:{sel:new Set(),opts:['Con existencia','Sin existencia']},
+  clas: {sel:new Set(),opts:[]},
+  tnec: {sel:new Set(),opts:[]}
 };
 
-// ============================================================
-// NAVEGACIÓN
-// ============================================================
-function toggleGroup(id) {
-  document.querySelector(`#${id} .nav-group-header`).classList.toggle('open');
-  document.getElementById(`children-${id}`).classList.toggle('open');
+// ══ CACHÉ DOM ════════════════════════════════════════════════
+const $=id=>document.getElementById(id);
+const DOM={};
+function cacheDOM(){
+  ['uploadArea','autoLoadMsg','manualLoad','filtros-globales','group-1',
+   'ct-zona-1','ct-zona-2','ct-zona-3',
+   'chart-1','chart-2','chart-3',
+   'tbody-1','tbody-2','tbody-3',
+   'kpi-tot','kpi-tot-sub','kpi-exist','kpi-con','kpi-con-sub',
+   'kpi-sin','kpi-sin-sub','kpi-pct-con','kpi-pct-sin',
+   'kpi-alm-count','kpi-alm-exist','kpi-alm-prom','kpi-alm-max','kpi-alm-max-val',
+   'kpi-di-prom','kpi-di-max','kpi-di-max-alm','kpi-di-min','kpi-di-min-alm','kpi-di-count'
+  ].forEach(id=>{DOM[id]=$(id);});
 }
-function changeDash(n) {
-  document.querySelectorAll('.dash-panel').forEach(p => {
-    p.classList.remove('active');
-    p.style.display = ''; // limpiar cualquier inline que haya quedado
-  });
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`dash-${n}`).classList.add('active');
-  document.getElementById(`t${n}`).classList.add('active');
+
+// ══ NAVEGACIÓN ═══════════════════════════════════════════════
+function toggleGroup(id){
+  document.querySelector(`#${id} .nav-group-header`).classList.toggle('open');
+  $(`children-${id}`).classList.toggle('open');
+}
+function changeDash(n){
+  document.querySelectorAll('.dash-panel').forEach(p=>{p.classList.remove('active');p.style.display='';});
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  $(`dash-${n}`).classList.add('active');
+  $(`t${n}`).classList.add('active');
   renderActiveTab();
 }
 
-// ============================================================
-// OVERLAY
-// ============================================================
-function mostrarOverlay(b) {
-  if (b) {
-    document.body.classList.add('cargando');
-  } else {
-    document.body.classList.remove('cargando');
-    // Limpiar cualquier inline display que pueda haber quedado
-    document.querySelectorAll('.dash-panel').forEach(p => p.style.display = '');
-  }
+// ══ PANTALLA DE CARGA ════════════════════════════════════════
+function mostrarOverlay(b){
+  document.body.classList.toggle('cargando',!!b);
+  if(!b) document.querySelectorAll('.dash-panel').forEach(p=>p.style.display='');
 }
 
-// ============================================================
-// CARGA AUTOMÁTICA DESDE EXCEL
-// ============================================================
-async function cargarDatos() {
+// ══ PARSER COMPARTIDO DE WORKBOOK ════════════════════════════
+function parseWorkbook(buf){
+  const wb=XLSX.read(buf,{type:'buffer'});
+  const sName=wb.SheetNames.includes('InventarioAlmacen')?'InventarioAlmacen':wb.SheetNames[0];
+  const inv=XLSX.utils.sheet_to_json(wb.Sheets[sName],{defval:''});
+  const mpSheet=wb.SheetNames.find(s=>/c[oó]digos|mp|mtto|cat[aá]logo/i.test(s)&&s!==sName)||wb.SheetNames.find(s=>s!==sName);
+  const mp=mpSheet?XLSX.utils.sheet_to_json(wb.Sheets[mpSheet],{defval:''}):[];
+  return{inv,mp};
+}
+
+// ══ CARGA AUTOMÁTICA ═════════════════════════════════════════
+async function cargarDatos(){
   mostrarOverlay(true);
-  try {
-    // cache:'default' permite que el navegador use ETag/304 y no re-descargue si no cambió
-    const resp = await fetch(RAW_URL, { cache: 'default' });
-    if (!resp.ok) throw new Error('Sin respuesta');
-    const buf = await resp.arrayBuffer();
-    // 'buffer' es más rápido que 'array' para ArrayBuffer
-    const wb = XLSX.read(buf, { type: 'buffer' });
-    const sName = wb.SheetNames.includes('InventarioAlmacen') ? 'InventarioAlmacen' : wb.SheetNames[0];
-    RAW_INV = XLSX.utils.sheet_to_json(wb.Sheets[sName], { defval: '' });
-    const mpSheet = wb.SheetNames.find(s => /c[oó]digos|mp|mtto|cat[aá]logo/i.test(s) && s !== sName) || wb.SheetNames.find(s => s !== sName);
-    RAW_MP = mpSheet ? XLSX.utils.sheet_to_json(wb.Sheets[mpSheet], { defval: '' }) : [];
-    // Diferir procesamiento para que el navegador pueda pintar el spinner primero
-    await new Promise(r => setTimeout(r, 0));
+  try{
+    const resp=await fetch(RAW_URL,{cache:'default'});
+    if(!resp.ok) throw new Error('Sin respuesta');
+    const buf=await resp.arrayBuffer();
+    const{inv,mp}=parseWorkbook(buf);
+    RAW_INV=inv; RAW_MP=mp;
+    await new Promise(r=>setTimeout(r,0));
     procesarDatos();
-  } catch (e) {
+  }catch(e){
     console.error(e);
-    // Fallo en autocarga: mostrar carga manual
-    document.getElementById('autoLoadMsg').style.display = 'none';
-    document.getElementById('manualLoad').style.display = 'block';
-    return; // No ocultar uploadArea
-  } finally {
+    DOM.autoLoadMsg.style.display='none';
+    DOM.manualLoad.style.display='block';
+    return;
+  }finally{
     mostrarOverlay(false);
   }
 }
 
-// ============================================================
-// PROCESAR FILAS DEL EXCEL
-// ============================================================
-function procesarDatos() {
-  if (!RAW_INV.length) return;
-  const invCols = Object.keys(RAW_INV[0]);
-
-  // Construir Set de tipos válidos desde MP
-  const tiposSet = new Set();
-  if (RAW_MP.length) {
-    const mpCols = Object.keys(RAW_MP[0]);
-    const mpComp = mpCols.find(c => c.trim() === 'COMPONENTE') || mpCols.find(c => /^componente$/i.test(c.trim())) || mpCols[2];
-    for (const r of RAW_MP) {
-      const v = String(r[mpComp] || '').trim().toUpperCase();
-      if (v) tiposSet.add(v);
-    }
+// ══ PROCESAMIENTO DE FILAS ═══════════════════════════════════
+function procesarDatos(){
+  if(!RAW_INV.length) return;
+  const cols=Object.keys(RAW_INV[0]);
+  const tiposSet=new Set();
+  if(RAW_MP.length){
+    const mc=Object.keys(RAW_MP[0]);
+    const compCol=mc.find(c=>c.trim()==='COMPONENTE')||mc.find(c=>/^componente$/i.test(c.trim()))||mc[2];
+    for(const r of RAW_MP){const v=String(r[compCol]||'').trim().toUpperCase();if(v)tiposSet.add(v);}
   }
-
-  const findCol = (exact, regex, fallbackIdx) =>
-    invCols.find(c => c.trim() === exact) ||
-    invCols.find(c => regex.test(c.trim())) ||
-    invCols[fallbackIdx];
-
-  const cCod    = findCol('Código',      /^c[oó]digo$/i, 2);
-  const cMtto   = findCol('MTTO',        /^mtto$/i, 3);
-  const cDesc   = findCol('Descripción', /^descripci/i, 4);
-  const cExist  = findCol('Existencias', /^exist/i, 12);
-  const cAlm    = findCol('Almacén',     /^alm[aá]c[eé]n$/i, 0);
-  const cDiv    = findCol('Division',    /^divis/i, 1);
-  const cFam    = invCols.find(c => /^famil/i.test(c.trim())) || '';
-  const cClas   = invCols.find(c => /^clasificaci[oó]n$/i.test(c.trim())) || invCols.find(c => /clasif/i.test(c.trim())) || null;
-  const cTnec   = invCols.find(c => /necesidad/i.test(c.trim())) || null;
-  // Días de Inventario
-  // Columna de Días de Inventario (pre-calculada en Excel, usada solo si no hay consumo)
-  const cDias    = invCols.find(c => /d[ií]as.*inventario|d[ií]as_inventario|d[ií]as.*inv/i.test(c.trim())) || null;
-  // Columna de Consumo Diario — con esta se recalcula: Días = Existencias / Consumo Diario
-  const cConsumo = invCols.find(c => /consumo.*diario|consumo_diario|cons.*diario/i.test(c.trim())) ||
-                   invCols.find(c => /^consumo$/i.test(c.trim())) ||
-                   invCols.find(c => /consumo/i.test(c.trim())) || null;
-
-  const out = [];
-  for (const r of RAW_INV) {
-    const codigo = String(r[cCod] || '').trim();
-    if (!codigo) continue;
-    const alm = String(r[cAlm] || '').trim();
-    const div = String(r[cDiv] || '').trim();
-    const almacen = (alm && div) ? alm + ' – ' + div : (alm || div || 'Sin almacén');
-    const exist = parseFloat(String(r[cExist] || '0').replace(',', '.')) || 0;
-    const mttoRaw = String(r[cMtto] || '').trim().toUpperCase();
-    const familia = cFam ? (String(r[cFam] || '').trim() || 'Sin familia') : 'Sin familia';
-    // esPrev: la fila tiene MTTO reconocido en el catálogo → preventivo
-    const esPrev = tiposSet.size > 0 ? tiposSet.has(mttoRaw) : true; // sin catálogo: tratar todo como prev
-    let tipo;
-    if (esPrev) {
-      // Tipo = valor del campo MTTO (Mecánico, Eléctrico, etc.)
-      tipo = mttoRaw.charAt(0) + mttoRaw.slice(1).toLowerCase();
-    } else {
-      // Tipo = familia (para correctivos/no clasificados)
-      tipo = familia || 'Sin clasificar';
-    }
-    // consumo diario por fila (para sumar por almacén y recalcular días = ΣExist / ΣConsumo)
-    let consumoDiario = null;
-    if (cConsumo) {
-      const cVal = parseFloat(String(r[cConsumo] || '').replace(',', '.'));
-      if (isFinite(cVal) && cVal > 0) consumoDiario = cVal;
-    }
-    // días pre-calculados en Excel (fallback si no hay columna de consumo)
-    let dias = null;
-    if (cDias) {
-      const dVal = parseFloat(String(r[cDias] || '').replace(',', '.'));
-      if (isFinite(dVal) && dVal >= 0) dias = dVal;
-    }
-    out.push({
-      codigo, almacen, existencia: exist, tipo, esPrev, familia,
-      desc:   String(r[cDesc] || '').trim(),
-      clasif: cClas ? String(r[cClas] || '').trim() : '',
-      tnec:   cTnec ? String(r[cTnec] || '').trim() : '',
-      dias, consumoDiario
-    });
+  const fc=(ex,re,i)=>cols.find(c=>c.trim()===ex)||cols.find(c=>re.test(c.trim()))||cols[i];
+  const cCod=fc('Código',/^c[oó]digo$/i,2), cMtto=fc('MTTO',/^mtto$/i,3);
+  const cDesc=fc('Descripción',/^descripci/i,4), cExist=fc('Existencias',/^exist/i,12);
+  const cAlm=fc('Almacén',/^alm[aá]c[eé]n$/i,0), cDiv=fc('Division',/^divis/i,1);
+  const cFam=cols.find(c=>/^famil/i.test(c.trim()))||'';
+  const cClas=cols.find(c=>/^clasificaci[oó]n$/i.test(c.trim()))||cols.find(c=>/clasif/i.test(c.trim()))||null;
+  const cTnec=cols.find(c=>/necesidad/i.test(c.trim()))||null;
+  const cDias=cols.find(c=>/d[ií]as.*inv/i.test(c.trim()))||null;
+  const cConsumo=cols.find(c=>/consumo.*diario|consumo_diario|cons.*diario/i.test(c.trim()))||cols.find(c=>/^consumo$/i.test(c.trim()))||cols.find(c=>/consumo/i.test(c.trim()))||null;
+  const hasTipos=tiposSet.size>0, hasFam=!!cFam, hasClas=!!cClas, hasTnec=!!cTnec, hasDias=!!cDias, hasConsumo=!!cConsumo;
+  const out=[];
+  for(const r of RAW_INV){
+    const codigo=String(r[cCod]||'').trim(); if(!codigo) continue;
+    const alm=String(r[cAlm]||'').trim(), div=String(r[cDiv]||'').trim();
+    const almacen=(alm&&div)?alm+' – '+div:(alm||div||'Sin almacén');
+    const exist=parseFloat(String(r[cExist]||'0').replace(',','.'))||0;
+    const mttoRaw=String(r[cMtto]||'').trim().toUpperCase();
+    const familia=hasFam?(String(r[cFam]||'').trim()||'Sin familia'):'Sin familia';
+    const esPrev=hasTipos?tiposSet.has(mttoRaw):true;
+    const tipo=esPrev?mttoRaw.charAt(0)+mttoRaw.slice(1).toLowerCase():(familia||'Sin clasificar');
+    let consumoDiario=null, dias=null;
+    if(hasConsumo){const v=parseFloat(String(r[cConsumo]||'').replace(',','.'));if(isFinite(v)&&v>0)consumoDiario=v;}
+    if(hasDias){const v=parseFloat(String(r[cDias]||'').replace(',','.'));if(isFinite(v)&&v>=0)dias=v;}
+    out.push({codigo,almacen,existencia:exist,tipo,esPrev,familia,
+      desc:String(r[cDesc]||'').trim(),
+      clasif:hasClas?String(r[cClas]||'').trim():'',
+      tnec:hasTnec?String(r[cTnec]||'').trim():'',
+      dias,consumoDiario});
   }
-  DATA = out;
+  DATA=out;
+  // Liberar memoria de datos crudos
+  RAW_INV=[]; RAW_MP=[];
   poblarFiltros();
   renderActiveTab();
 }
 
-// ============================================================
-// POBLAR FILTROS (opciones únicas desde DATA)
-// ============================================================
-function poblarFiltros() {
-  // Opciones de tipo separadas: preventivos usan MTTO, correctivos usan familia
-  const prevRows = DATA.filter(r => r.esPrev);
-  const corrRows = DATA.filter(r => !r.esPrev);
-  filtros.alm.opts  = [...new Set(DATA.map(r => r.almacen))].sort();
-  // Tipo de Mantenimiento: solo tipos preventivos (MTTO del catálogo)
-  // Los correctivos se agrupan por familia, se muestran cuando se filtra por Correctivos
-  filtros.tipo.opts = [...new Set(DATA.map(r => r.tipo))].sort();
-  filtros.clas.opts = [...new Set(DATA.map(r => r.clasif).filter(Boolean))].sort();
-  filtros.tnec.opts = [...new Set(DATA.map(r => r.tnec).filter(Boolean))].sort();
-  ['refac','alm','tipo','exist','clas','tnec'].forEach(k => { filtros[k].sel.clear(); });
-  // Iniciar con Preventivos seleccionado por defecto
+// ══ POBLAR FILTROS ═══════════════════════════════════════════
+function poblarFiltros(){
+  const almS=new Set(), tipoS=new Set(), clasS=new Set(), tnecS=new Set();
+  for(const r of DATA){
+    almS.add(r.almacen); tipoS.add(r.tipo);
+    if(r.clasif) clasS.add(r.clasif);
+    if(r.tnec) tnecS.add(r.tnec);
+  }
+  filtros.alm.opts=[...almS].sort();
+  filtros.tipo.opts=[...tipoS].sort();
+  filtros.clas.opts=[...clasS].sort();
+  filtros.tnec.opts=[...tnecS].sort();
+  FILTER_KEYS.forEach(k=>filtros[k].sel.clear());
   filtros.refac.sel.add('Preventivos');
-  ['refac','alm','tipo','exist','clas','tnec'].forEach(k => renderDropdown(k));
+  FILTER_KEYS.forEach(renderDropdown);
 }
 
-// ============================================================
-// DROPDOWNS CON CHECKBOX
-// ============================================================
-function renderDropdown(k) {
-  const content = document.getElementById(`dd-${k}-content`);
-  if (!content) return;
-  const f = filtros[k];
-  const isAll = f.sel.size === 0;
-  let html = `<div class="dropdown-item all-item">
-    <input type="checkbox" id="opt-${k}-all" ${isAll?'checked':''} onchange="toggleAll('${k}',this.checked)">
-    <label for="opt-${k}-all" style="cursor:pointer">Todos</label>
-  </div>`;
-  f.opts.forEach((o,i) => {
-    const id = `opt-${k}-${i}`;
-    const chk = isAll || f.sel.has(o);
-    html += `<div class="dropdown-item">
-      <input type="checkbox" id="${id}" ${chk?'checked':''} onchange="toggleOpt('${k}','${o.replace(/'/g,"\\'")}',this.checked)">
-      <label for="${id}" style="cursor:pointer">${o}</label>
-    </div>`;
-  });
-  content.innerHTML = html;
-  // Actualizar label y badge
-  const lbl = document.getElementById(`dd-${k}-label`);
-  const bdg = document.getElementById(`dd-${k}-badge`);
-  if (f.sel.size === 0) {
-    lbl.textContent = 'Todos';
-    if (bdg) bdg.textContent = '';
-  } else {
-    lbl.textContent = f.sel.size === 1 ? [...f.sel][0] : f.sel.size + ' sel.';
-    if (bdg) bdg.innerHTML = '<span class="badge">' + f.sel.size + '</span>';
+// ══ DROPDOWNS ════════════════════════════════════════════════
+function renderDropdown(k){
+  const content=$(`dd-${k}-content`); if(!content) return;
+  const f=filtros[k], isAll=f.sel.size===0;
+  const parts=[`<div class="dropdown-item all-item"><input type="checkbox" id="opt-${k}-all" ${isAll?'checked':''} onchange="toggleAll('${k}',this.checked)"><label for="opt-${k}-all" style="cursor:pointer">Todos</label></div>`];
+  for(let i=0;i<f.opts.length;i++){
+    const o=f.opts[i], id=`opt-${k}-${i}`, chk=isAll||f.sel.has(o);
+    parts.push(`<div class="dropdown-item"><input type="checkbox" id="${id}" ${chk?'checked':''} onchange="toggleOpt('${k}','${o.replace(/'/g,"\\'")}',this.checked)"><label for="${id}" style="cursor:pointer">${o}</label></div>`);
+  }
+  content.innerHTML=parts.join('');
+  const lbl=$(`dd-${k}-label`), bdg=$(`dd-${k}-badge`);
+  if(f.sel.size===0){
+    lbl.textContent='Todos'; if(bdg) bdg.textContent='';
+  }else{
+    lbl.textContent=f.sel.size===1?[...f.sel][0]:f.sel.size+' sel.';
+    if(bdg) bdg.innerHTML='<span class="badge">'+f.sel.size+'</span>';
   }
 }
 
-function toggleAll(k, checked) {
-  if (checked) {
-    filtros[k].sel.clear();
-  } else {
-    // Si "Todos" se desmarca con todo seleccionado, dejar todo desmarcado
-    filtros[k].sel = new Set(['__none__']);
-  }
-  renderDropdown(k);
-  renderActiveTab();
+function toggleAll(k,checked){
+  filtros[k].sel=checked?new Set():new Set(['__none__']);
+  renderDropdown(k); renderActiveTab();
 }
 
-function toggleOpt(k, val, checked) {
-  const f = filtros[k];
-  if (checked) {
-    if (f.sel.has('__none__')) f.sel.delete('__none__');
-    if (f.sel.size === 0) {
-      // Venía de "Todos" → seleccionar solo este
-      f.sel.add(val);
-    } else {
-      f.sel.add(val);
-      // Si ahora están todos marcados → colapsar a "Todos"
-      if (f.sel.size === f.opts.length) f.sel.clear();
-    }
-  } else {
-    if (f.sel.size === 0) {
-      // Desde "Todos" → expandir a todos menos este
-      f.opts.forEach(o => { if (o !== val) f.sel.add(o); });
-    } else {
-      f.sel.delete(val);
-      if (f.sel.size === 0) f.sel.add('__none__');
-    }
+function toggleOpt(k,val,checked){
+  const f=filtros[k];
+  if(checked){
+    if(f.sel.has('__none__')) f.sel.delete('__none__');
+    if(f.sel.size===0) f.sel.add(val);
+    else{f.sel.add(val);if(f.sel.size===f.opts.length) f.sel.clear();}
+  }else{
+    if(f.sel.size===0) f.opts.forEach(o=>{if(o!==val) f.sel.add(o);});
+    else{f.sel.delete(val);if(f.sel.size===0) f.sel.add('__none__');}
   }
-  renderDropdown(k);
-  renderActiveTab();
+  renderDropdown(k); renderActiveTab();
 }
 
-function toggleDropdown(id) {
-  const content = document.getElementById(`${id}-content`);
-  if (!content) return;
-  const open = content.classList.contains('open');
-  // Cerrar otros
-  document.querySelectorAll('.dropdown-content.open').forEach(d => d.classList.remove('open'));
-  if (!open) {
+function toggleDropdown(id){
+  const content=$(`${id}-content`); if(!content) return;
+  const isOpen=content.classList.contains('open');
+  document.querySelectorAll('.dropdown-content.open').forEach(d=>d.classList.remove('open'));
+  if(!isOpen){
     content.classList.add('open');
-    setTimeout(() => document.addEventListener('click', function handler(ev) {
-      if (!document.getElementById(id).contains(ev.target)) {
-        content.classList.remove('open');
-        document.removeEventListener('click', handler);
-      }
-    }), 0);
+    setTimeout(()=>document.addEventListener('click',function h(ev){
+      if(!$(id).contains(ev.target)){content.classList.remove('open');document.removeEventListener('click',h);}
+    }),0);
   }
 }
 
-
-
-function limpiarFiltros() {
-  ['refac','alm','tipo','exist','clas','tnec'].forEach(k => {
-    filtros[k].sel.clear();
-    renderDropdown(k);
-  });
+function limpiarFiltros(){
+  FILTER_KEYS.forEach(k=>{filtros[k].sel.clear();renderDropdown(k);});
   renderActiveTab();
 }
 
-// ============================================================
-// FILTRAR DATA SEGÚN FILTROS ACTIVOS
-// ============================================================
-function aplicarFiltros(rows) {
-  let r = rows;
-  const fa = filtros;
-  // Filtro de tipo de refacción (Preventivos / Correctivos)
-  if (fa.refac.sel.size > 0 && !fa.refac.sel.has('__none__')) {
-    const prev = fa.refac.sel.has('Preventivos');
-    const corr = fa.refac.sel.has('Correctivos');
-    if (prev && !corr) r = r.filter(x => x.esPrev);
-    else if (corr && !prev) r = r.filter(x => !x.esPrev);
+// ══ FILTRADO ═════════════════════════════════════════════════
+function aplicarFiltros(){
+  let r=DATA;
+  const fa=filtros;
+  if(fa.refac.sel.size>0&&!fa.refac.sel.has('__none__')){
+    const p=fa.refac.sel.has('Preventivos'),c=fa.refac.sel.has('Correctivos');
+    if(p&&!c) r=r.filter(x=>x.esPrev);
+    else if(c&&!p) r=r.filter(x=>!x.esPrev);
   }
-  if (fa.alm.sel.size > 0) {
-    if (fa.alm.sel.has('__none__')) return [];
-    r = r.filter(x => fa.alm.sel.has(x.almacen));
+  if(fa.alm.sel.size>0){if(fa.alm.sel.has('__none__'))return[];r=r.filter(x=>fa.alm.sel.has(x.almacen));}
+  if(fa.tipo.sel.size>0){if(fa.tipo.sel.has('__none__'))return[];r=r.filter(x=>fa.tipo.sel.has(x.tipo));}
+  if(fa.exist.sel.size>0&&!fa.exist.sel.has('__none__')){
+    const con=fa.exist.sel.has('Con existencia'),sin=fa.exist.sel.has('Sin existencia');
+    if(con&&!sin) r=r.filter(x=>x.existencia>0);
+    else if(sin&&!con) r=r.filter(x=>x.existencia<=0);
   }
-  if (fa.tipo.sel.size > 0) {
-    if (fa.tipo.sel.has('__none__')) return [];
-    r = r.filter(x => fa.tipo.sel.has(x.tipo));
-  }
-  if (fa.exist.sel.size > 0 && !fa.exist.sel.has('__none__')) {
-    const con = fa.exist.sel.has('Con existencia');
-    const sin = fa.exist.sel.has('Sin existencia');
-    if (con && !sin) r = r.filter(x => x.existencia > 0);
-    else if (sin && !con) r = r.filter(x => x.existencia <= 0);
-  }
-  if (fa.clas.sel.size > 0) {
-    if (fa.clas.sel.has('__none__')) return [];
-    r = r.filter(x => !x.clasif || fa.clas.sel.has(x.clasif));
-  }
-  if (fa.tnec.sel.size > 0) {
-    if (fa.tnec.sel.has('__none__')) return [];
-    r = r.filter(x => !x.tnec || fa.tnec.sel.has(x.tnec));
-  }
+  if(fa.clas.sel.size>0){if(fa.clas.sel.has('__none__'))return[];r=r.filter(x=>!x.clasif||fa.clas.sel.has(x.clasif));}
+  if(fa.tnec.sel.size>0){if(fa.tnec.sel.has('__none__'))return[];r=r.filter(x=>!x.tnec||fa.tnec.sel.has(x.tnec));}
   return r;
 }
 
-// ============================================================
-// RENDER DE PESTAÑAS
-// ============================================================
-function renderActiveTab() {
-  if (!DATA.length) return;
-  const activeTab = document.querySelector('.dash-panel.active');
-  if (!activeTab) return;
-  const id = activeTab.id;
-  // Actualizar etiquetas de zona
-  const almLbl = filtros.alm.sel.size === 0 ? 'TODOS LOS ALMACENES'
-                : filtros.alm.sel.has('__none__') ? 'NINGÚN ALMACÉN'
-                : filtros.alm.sel.size === 1 ? [...filtros.alm.sel][0].toUpperCase()
-                : filtros.alm.sel.size + ' ALMACENES';
-  const tipoLbl = filtros.tipo.sel.size === 0 ? 'TODOS LOS TIPOS'
-                : filtros.tipo.sel.has('__none__') ? 'NINGÚN TIPO'
-                : filtros.tipo.sel.size === 1 ? [...filtros.tipo.sel][0].toUpperCase()
-                : filtros.tipo.sel.size + ' TIPOS';
-
-  if (id === 'dash-1') {
-    document.getElementById('ct-zona-1').textContent = almLbl;
-    renderPanel1();
-  } else if (id === 'dash-2') {
-    document.getElementById('ct-zona-2').textContent = tipoLbl;
-    renderPanel2();
-  } else if (id === 'dash-3') {
-    document.getElementById('ct-zona-3').textContent = almLbl;
-    renderPanel3();
-  }
+// ══ RENDER ACTIVO ════════════════════════════════════════════
+function fmtLabel(sel,tipoTxt,todosTxt){
+  if(sel.size===0) return todosTxt;
+  if(sel.has('__none__')) return'NINGÚN '+tipoTxt;
+  return sel.size===1?[...sel][0].toUpperCase():sel.size+' '+tipoTxt+'ES';
 }
 
-// ── Helper: destruir gráfica anterior antes de crear nueva
-function destroyChart(n) {
-  if (chartInstances[n]) { chartInstances[n].destroy(); chartInstances[n] = null; }
+function renderActiveTab(){
+  if(!DATA.length) return;
+  const active=document.querySelector('.dash-panel.active');
+  if(!active) return;
+  const id=active.id;
+  if(id==='dash-1'){DOM['ct-zona-1'].textContent=fmtLabel(filtros.alm.sel,'ALMACÉN','TODOS LOS ALMACENES');renderPanel1();}
+  else if(id==='dash-2'){DOM['ct-zona-2'].textContent=fmtLabel(filtros.tipo.sel,'TIPO','TODOS LOS TIPOS');renderPanel2();}
+  else if(id==='dash-3'){DOM['ct-zona-3'].textContent=fmtLabel(filtros.alm.sel,'ALMACÉN','TODOS LOS ALMACENES');renderPanel3();}
 }
 
-// ============================================================
-// PANEL 1: EXISTENCIAS POR TIPO DE MANTENIMIENTO
-// ============================================================
-function renderPanel1() {
-  const rows = aplicarFiltros(DATA);
-  // KPIs
-  const tot = rows.length;
-  let exist = 0, con = 0;
-  const tiposU = new Set();
-  for (const r of rows) {
-    exist += r.existencia;
-    if (r.existencia > 0) con++;
+function destroyChart(n){if(chartInstances[n]){chartInstances[n].destroy();chartInstances[n]=null;}}
+
+// ══ OPCIONES COMPARTIDAS DE CHART.JS ═════════════════════════
+const CHART_BASE={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
+const GRID_OFF={display:false};
+
+// ══ PANEL 1: EXISTENCIAS POR TIPO DE MANTENIMIENTO ═══════════
+function renderPanel1(){
+  const rows=aplicarFiltros();
+  const tot=rows.length;
+  let exist=0,con=0;
+  const tiposU=new Set(), agg={};
+  for(const r of rows){
+    exist+=r.existencia;
+    if(r.existencia>0) con++;
     tiposU.add(r.tipo);
+    agg[r.tipo]=(agg[r.tipo]||0)+r.existencia;
   }
-  document.getElementById('kpi-tot').textContent = tot.toLocaleString('es-MX');
-  document.getElementById('kpi-tot-sub').textContent = tiposU.size + ' tipo(s)';
-  document.getElementById('kpi-exist').textContent = exist.toLocaleString('es-MX');
-  document.getElementById('kpi-con').textContent = con.toLocaleString('es-MX');
-  document.getElementById('kpi-con-sub').textContent = tot ? (con/tot*100).toFixed(1) + '%' : '—';
-  document.getElementById('kpi-sin').textContent = (tot-con).toLocaleString('es-MX');
-  document.getElementById('kpi-sin-sub').textContent = tot ? ((tot-con)/tot*100).toFixed(1) + '%' : '—';
-  document.getElementById('kpi-pct-con').textContent = tot ? (con/tot*100).toFixed(1) + '%' : '—';
-  document.getElementById('kpi-pct-sin').textContent = tot ? ((tot-con)/tot*100).toFixed(1) + '%' : '—';
+  // KPIs — un solo cálculo de porcentaje
+  const pctCon=tot?(con/tot*100).toFixed(1)+'%':'—';
+  const pctSin=tot?((tot-con)/tot*100).toFixed(1)+'%':'—';
+  DOM['kpi-tot'].textContent=FMT(tot);
+  DOM['kpi-tot-sub'].textContent=tiposU.size+' tipo(s)';
+  DOM['kpi-exist'].textContent=FMT(exist);
+  DOM['kpi-con'].textContent=FMT(con);
+  DOM['kpi-con-sub'].textContent=pctCon;
+  DOM['kpi-sin'].textContent=FMT(tot-con);
+  DOM['kpi-sin-sub'].textContent=pctSin;
+  DOM['kpi-pct-con'].textContent=pctCon;
+  DOM['kpi-pct-sin'].textContent=pctSin;
 
-  // Gráfica de barras horizontales — Existencias por Tipo
-  const agg = {};
-  for (const r of rows) agg[r.tipo] = (agg[r.tipo]||0) + r.existencia;
-  const arr = Object.entries(agg).sort((a,b) => b[1]-a[1]);
-  const labels = arr.map(([l]) => l);
-  const data   = arr.map(([,v]) => v);
-
+  // Gráfica
+  const arr=Object.entries(agg).sort((a,b)=>b[1]-a[1]);
   destroyChart(1);
-  const ctx = document.getElementById('chart-1').getContext('2d');
-  chartInstances[1] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Existencias',
-        data,
-        backgroundColor: '#880015',
-        borderColor: '#880015',
-        borderWidth: 0,
-        borderRadius: 4
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: c => c.parsed.x.toLocaleString('es-MX') + ' piezas' } },
-        datalabels: {
-          anchor: 'end', align: 'end',
-          color: '#333',
-          font: { size: 10, weight: 'bold' },
-          formatter: v => v.toLocaleString('es-MX')
-        }
-      },
-      scales: {
-        x: { beginAtZero: true, grid: { display: false }, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('es-MX') } },
-        y: { grid: { display: false }, ticks: { font: { size: 10 }, autoSkip: false } }
-      }
-    },
+  chartInstances[1]=new Chart(DOM['chart-1'].getContext('2d'),{
+    type:'bar',
+    data:{labels:arr.map(([l])=>l),datasets:[{data:arr.map(([,v])=>v),backgroundColor:'#880015',borderRadius:4}]},
+    options:{...CHART_BASE,indexAxis:'y',
+      plugins:{...CHART_BASE.plugins,
+        tooltip:{callbacks:{label:c=>FMT(c.parsed.x)+' piezas'}},
+        datalabels:{anchor:'end',align:'end',color:'#333',font:{size:10,weight:'bold'},formatter:FMT}},
+      scales:{x:{beginAtZero:true,grid:GRID_OFF,ticks:{font:{size:10},callback:FMT}},y:{grid:GRID_OFF,ticks:{font:{size:10},autoSkip:false}}}}
   });
 
-  // Tabla de detalle por material
-  const tbody = document.getElementById('tbody-1');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:40px;color:#aaa;text-align:center">Sin datos</td></tr>';
-    return;
+  // Tabla — usar array push (más rápido que map+join para 500 filas)
+  const tb=DOM['tbody-1'];
+  if(!rows.length){tb.innerHTML='<tr><td colspan="7" style="padding:40px;color:#aaa;text-align:center">Sin datos</td></tr>';return;}
+  const parts=[];
+  const limit=Math.min(rows.length,500);
+  for(let i=0;i<limit;i++){
+    const r=rows[i];
+    parts.push('<tr><td class="label-col">',r.codigo,'</td><td style="text-align:left;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="',r.desc,'">',r.desc||'—','</td><td>',r.tipo||'—','</td><td style="text-align:left">',r.almacen,'</td><td>',r.clasif||'—','</td><td>',r.familia||'—','</td><td style="font-weight:700;color:',r.existencia>0?'#227447':'#E4002B','">',FMT(r.existencia),'</td></tr>');
   }
-  tbody.innerHTML = rows.slice(0, 500).map(r => `<tr>
-    <td class="label-col">${r.codigo}</td>
-    <td style="text-align:left;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
-    <td>${r.tipo||'—'}</td>
-    <td style="text-align:left">${r.almacen}</td>
-    <td>${r.clasif||'—'}</td>
-    <td>${r.familia||'—'}</td>
-    <td style="font-weight:700;color:${r.existencia>0?'#227447':'#E4002B'}">${r.existencia.toLocaleString('es-MX')}</td>
-  </tr>`).join('');
+  tb.innerHTML=parts.join('');
 }
 
-// ============================================================
-// PANEL 2: EXISTENCIAS POR ALMACÉN
-// ============================================================
-function renderPanel2() {
-  const rows = aplicarFiltros(DATA);
-  const agg = {};
-  for (const r of rows) agg[r.almacen] = (agg[r.almacen]||0) + r.existencia;
-  const arr = Object.entries(agg).sort((a,b) => b[1]-a[1]);
-
-  // KPIs
-  const total = arr.reduce((a,[,v]) => a+v, 0);
-  document.getElementById('kpi-alm-count').textContent = arr.length;
-  document.getElementById('kpi-alm-exist').textContent = total.toLocaleString('es-MX');
-  document.getElementById('kpi-alm-prom').textContent = arr.length ? Math.round(total/arr.length).toLocaleString('es-MX') : '—';
-  if (arr.length) {
-    const [topAlm, topVal] = arr[0];
-    document.getElementById('kpi-alm-max').textContent = topAlm.length > 18 ? topAlm.slice(0,17) + '…' : topAlm;
-    document.getElementById('kpi-alm-max-val').textContent = topVal.toLocaleString('es-MX') + ' piezas';
-  } else {
-    document.getElementById('kpi-alm-max').textContent = '—';
-    document.getElementById('kpi-alm-max-val').textContent = '—';
+// ══ PANEL 2: EXISTENCIAS POR ALMACÉN ═════════════════════════
+function renderPanel2(){
+  const rows=aplicarFiltros();
+  const agg={}, matCount={};
+  for(const r of rows){
+    agg[r.almacen]=(agg[r.almacen]||0)+r.existencia;
+    matCount[r.almacen]=(matCount[r.almacen]||0)+1;
   }
+  const arr=Object.entries(agg).sort((a,b)=>b[1]-a[1]);
+  const total=arr.reduce((a,[,v])=>a+v,0);
 
-  // Gráfica de columnas verticales
-  const labels = arr.map(([l]) => l.length > 18 ? l.slice(0,16) + '…' : l);
-  const data = arr.map(([,v]) => v);
+  DOM['kpi-alm-count'].textContent=arr.length;
+  DOM['kpi-alm-exist'].textContent=FMT(total);
+  DOM['kpi-alm-prom'].textContent=arr.length?FMT(Math.round(total/arr.length)):'—';
+  if(arr.length){
+    DOM['kpi-alm-max'].textContent=arr[0][0].length>18?arr[0][0].slice(0,17)+'…':arr[0][0];
+    DOM['kpi-alm-max-val'].textContent=FMT(arr[0][1])+' piezas';
+  }else{DOM['kpi-alm-max'].textContent='—';DOM['kpi-alm-max-val'].textContent='—';}
 
+  const labels=arr.map(([l])=>l.length>18?l.slice(0,16)+'…':l);
   destroyChart(2);
-  const ctx = document.getElementById('chart-2').getContext('2d');
-  chartInstances[2] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Existencias',
-        data,
-        backgroundColor: '#880015',
-        borderRadius: 4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: ctx => arr[ctx[0].dataIndex][0],
-            label: c => c.parsed.y.toLocaleString('es-MX') + ' piezas'
-          }
-        },
-        datalabels: {
-          anchor: 'end', align: 'top',
-          color: '#333',
-          font: { size: 9, weight: 'bold' },
-          formatter: v => v.toLocaleString('es-MX')
-        }
-      },
-      scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 9 }, autoSkip: false, maxRotation: 0, minRotation: 0 } },
-        y: { beginAtZero: true, grid: { display: false }, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('es-MX') } }
-      }
-    },
+  chartInstances[2]=new Chart(DOM['chart-2'].getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{data:arr.map(([,v])=>v),backgroundColor:'#880015',borderRadius:4}]},
+    options:{...CHART_BASE,
+      plugins:{...CHART_BASE.plugins,
+        tooltip:{callbacks:{title:ctx=>arr[ctx[0].dataIndex][0],label:c=>FMT(c.parsed.y)+' piezas'}},
+        datalabels:{anchor:'end',align:'top',color:'#333',font:{size:9,weight:'bold'},formatter:FMT}},
+      scales:{x:{grid:GRID_OFF,ticks:{font:{size:9},autoSkip:false,maxRotation:0,minRotation:0}},y:{beginAtZero:true,grid:GRID_OFF,ticks:{font:{size:10},callback:FMT}}}}
   });
 
-  // Tabla
-  const tbody = document.getElementById('tbody-2');
-  if (!arr.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="padding:40px;color:#aaa">Sin datos</td></tr>';
-    return;
-  }
-  // contar materiales por almacén
-  const matCount = {};
-  for (const r of rows) matCount[r.almacen] = (matCount[r.almacen]||0)+1;
-  tbody.innerHTML = arr.map(([alm,exist]) => {
-    const pct = total ? (exist/total*100).toFixed(2) : 0;
-    return `<tr>
-      <td class="label-col">${alm}</td>
-      <td>${(matCount[alm]||0).toLocaleString('es-MX')}</td>
-      <td style="font-weight:600">${exist.toLocaleString('es-MX')}</td>
-      <td style="color:#0070C0;font-weight:600">${pct}%</td>
-    </tr>`;
+  const tb=DOM['tbody-2'];
+  if(!arr.length){tb.innerHTML='<tr><td colspan="4" style="padding:40px;color:#aaa">Sin datos</td></tr>';return;}
+  tb.innerHTML=arr.map(([alm,ex])=>{
+    const pct=total?(ex/total*100).toFixed(2):0;
+    return`<tr><td class="label-col">${alm}</td><td>${FMT(matCount[alm]||0)}</td><td style="font-weight:600">${FMT(ex)}</td><td style="color:#880015;font-weight:600">${pct}%</td></tr>`;
   }).join('');
 }
 
-// ============================================================
-// PANEL 3: DÍAS DE INVENTARIO POR ALMACÉN
-// Fórmula igual al dashboard original:
-//   Días por almacén = SUM(Existencias) / SUM(Consumo Diario)
-// Si no hay columna de Consumo Diario, usa la columna "Días de Inventario"
-// del Excel con promedio simple por almacén (igual al original de Power BI).
-// ============================================================
-function renderPanel3() {
-  const rows = aplicarFiltros(DATA);
+// ══ PANEL 3: DÍAS DE INVENTARIO POR ALMACÉN ══════════════════
+function renderPanel3(){
+  const rows=aplicarFiltros();
+  const tieneConsumo=rows.some(r=>r.consumoDiario!==null);
+  const tieneDias=rows.some(r=>r.dias!==null);
 
-  // Detectar modo de cálculo: ¿hay consumo diario en los datos?
-  const tieneConsumo = rows.some(r => r.consumoDiario !== null);
-  const tieneDias    = rows.some(r => r.dias !== null);
-
-  if (!tieneConsumo && !tieneDias) {
-    ['kpi-di-prom','kpi-di-max','kpi-di-min','kpi-di-count'].forEach(id => {
-      document.getElementById(id).textContent = '—';
-    });
-    document.getElementById('kpi-di-max-alm').textContent = 'Sin columna de Consumo Diario o Días de Inventario';
-    document.getElementById('kpi-di-min-alm').textContent = '';
+  if(!tieneConsumo&&!tieneDias){
+    ['kpi-di-prom','kpi-di-max','kpi-di-min','kpi-di-count'].forEach(id=>{DOM[id].textContent='—';});
+    DOM['kpi-di-max-alm'].textContent='Sin columna de Consumo Diario o Días de Inventario';
+    DOM['kpi-di-min-alm'].textContent='';
     destroyChart(3);
-    document.getElementById('tbody-3').innerHTML =
-      '<tr><td colspan="5" style="padding:40px;color:#aaa;text-align:center">No se encontró la columna "Consumo Diario" ni "Días de Inventario" en el Excel</td></tr>';
+    DOM['tbody-3'].innerHTML='<tr><td colspan="5" style="padding:40px;color:#aaa;text-align:center">No se encontró la columna "Consumo Diario" ni "Días de Inventario"</td></tr>';
     return;
   }
 
-  // Agrupar por almacén
-  const agg = {};
-  for (const r of rows) {
-    if (!agg[r.almacen]) agg[r.almacen] = { sumExist:0, sumConsumo:0, sumDias:0, nDias:0, n:0 };
-    const g = agg[r.almacen];
-    g.sumExist += r.existencia;
-    g.n++;
-    if (tieneConsumo && r.consumoDiario !== null) g.sumConsumo += r.consumoDiario;
-    if (!tieneConsumo && r.dias !== null) { g.sumDias += r.dias; g.nDias++; }
+  const agg={};
+  for(const r of rows){
+    if(!agg[r.almacen]) agg[r.almacen]={sumE:0,sumC:0,sumD:0,nD:0,n:0};
+    const g=agg[r.almacen];
+    g.sumE+=r.existencia; g.n++;
+    if(tieneConsumo&&r.consumoDiario!==null) g.sumC+=r.consumoDiario;
+    if(!tieneConsumo&&r.dias!==null){g.sumD+=r.dias;g.nD++;}
   }
 
-  // Calcular días por almacén según modo
-  // Modo A (consumo diario disponible): Días = SUM(Exist) / SUM(ConsumoDiario)  ← igual al original
-  // Modo B (solo columna Días del Excel): promedio simple de días
-  const arr = Object.entries(agg)
-    .map(([alm, g]) => {
-      let dias;
-      if (tieneConsumo) {
-        dias = g.sumConsumo > 0 ? g.sumExist / g.sumConsumo : 0;
-      } else {
-        dias = g.nDias > 0 ? g.sumDias / g.nDias : 0;
-      }
-      return { alm, dias: Math.round(dias), exist: g.sumExist, n: g.n };
-    })
-    .filter(x => x.n > 0)
-    .sort((a,b) => b.dias - a.dias);
+  const arr=Object.entries(agg).map(([alm,g])=>{
+    const dias=tieneConsumo?(g.sumC>0?g.sumE/g.sumC:0):(g.nD>0?g.sumD/g.nD:0);
+    return{alm,dias:Math.round(dias),exist:g.sumE,n:g.n};
+  }).filter(x=>x.n>0).sort((a,b)=>b.dias-a.dias);
 
-  const modoLabel = tieneConsumo ? 'Existencias ÷ Consumo Diario' : 'Promedio de Días de Inventario por almacén';
-
-  if (!arr.length) {
-    document.getElementById('kpi-di-prom').textContent = '—';
-    document.getElementById('kpi-di-max').textContent = '—';
-    document.getElementById('kpi-di-max-alm').textContent = '—';
-    document.getElementById('kpi-di-min').textContent = '—';
-    document.getElementById('kpi-di-min-alm').textContent = '—';
-    document.getElementById('kpi-di-count').textContent = '0';
-    destroyChart(3);
-    document.getElementById('tbody-3').innerHTML = '<tr><td colspan="5" style="padding:40px;color:#aaa;text-align:center">Sin datos</td></tr>';
+  if(!arr.length){
+    ['kpi-di-prom','kpi-di-max','kpi-di-min'].forEach(id=>{DOM[id].textContent='—';});
+    DOM['kpi-di-max-alm'].textContent='—';DOM['kpi-di-min-alm'].textContent='—';
+    DOM['kpi-di-count'].textContent='0';destroyChart(3);
+    DOM['tbody-3'].innerHTML='<tr><td colspan="5" style="padding:40px;color:#aaa;text-align:center">Sin datos</td></tr>';
     return;
   }
 
-  // KPIs
-  const totalExist   = arr.reduce((a,x) => a + x.exist, 0);
-  const totalConsumo = tieneConsumo ? Object.values(agg).reduce((a,g) => a+g.sumConsumo, 0) : 0;
-  const promGral     = tieneConsumo
-    ? (totalConsumo > 0 ? Math.round(totalExist / totalConsumo) : 0)
-    : Math.round(arr.reduce((a,x) => a+x.dias, 0) / arr.length);
-  const maxItem = arr[0];
-  const minItem = arr[arr.length-1];
+  const totalE=arr.reduce((a,x)=>a+x.exist,0);
+  const totalC=tieneConsumo?Object.values(agg).reduce((a,g)=>a+g.sumC,0):0;
+  const promGral=tieneConsumo?(totalC>0?Math.round(totalE/totalC):0):Math.round(arr.reduce((a,x)=>a+x.dias,0)/arr.length);
 
-  document.getElementById('kpi-di-prom').textContent = promGral.toLocaleString('es-MX');
-  document.getElementById('kpi-di-max').textContent  = maxItem.dias.toLocaleString('es-MX');
-  document.getElementById('kpi-di-max-alm').textContent = maxItem.alm;
-  document.getElementById('kpi-di-min').textContent  = minItem.dias.toLocaleString('es-MX');
-  document.getElementById('kpi-di-min-alm').textContent = minItem.alm;
-  document.getElementById('kpi-di-count').textContent = arr.length;
+  DOM['kpi-di-prom'].textContent=FMT(promGral);
+  DOM['kpi-di-max'].textContent=FMT(arr[0].dias);
+  DOM['kpi-di-max-alm'].textContent=arr[0].alm;
+  DOM['kpi-di-min'].textContent=FMT(arr[arr.length-1].dias);
+  DOM['kpi-di-min-alm'].textContent=arr[arr.length-1].alm;
+  DOM['kpi-di-count'].textContent=arr.length;
 
-  // Actualizar subtítulo de la gráfica con el modo de cálculo
-  document.getElementById('ct-zona-3').textContent =
-    filtros.alm.sel.size === 0 ? 'TODOS LOS ALMACENES'
-    : filtros.alm.sel.size === 1 ? [...filtros.alm.sel][0].toUpperCase()
-    : filtros.alm.sel.size + ' ALMACENES';
+  const infoEl=document.querySelector('#dash-3 .ct-info');
+  if(infoEl) infoEl.textContent=(tieneConsumo?'EXISTENCIAS ÷ CONSUMO DIARIO':'PROMEDIO DE DÍAS DE INVENTARIO');
 
-  // Etiqueta secundaria con la fórmula usada
-  const infoEl = document.querySelector('#dash-3 .ct-info');
-  if (infoEl) infoEl.textContent = modoLabel.toUpperCase();
-
-  // Gráfica — barras verticales, un color por almacén (como el original Power BI)
-  // Paleta autorizada Senda Citi (colores aprobados únicamente)
-  const PAL_ALM = ['#880015','#0070C0','#333F48','#FFC000','#00B050','#E4002B',
-                   '#4A4847','#D9D9D9','#880015','#0070C0','#333F48','#FFC000','#00B050'];
-  const labels = arr.map(x => {
-    // Mostrar solo la parte antes del "–" si hay División (igual al original)
-    const partes = x.alm.split('–');
-    return partes[0].trim().length > 10 ? partes[0].trim().slice(0,9)+'…' : partes[0].trim();
-  });
-  const data   = arr.map(x => x.dias);
-  const colors = arr.map(() => '#880015');
-
+  const labels=arr.map(x=>{const p=x.alm.split('–');return p[0].trim().length>10?p[0].trim().slice(0,9)+'…':p[0].trim();});
   destroyChart(3);
-  const ctx = document.getElementById('chart-3').getContext('2d');
-  chartInstances[3] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Días de Inventario',
-        data,
-        backgroundColor: colors,
-        borderRadius: 3,
-        borderSkipped: false
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: { padding: { top: 20 } },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: ctx => arr[ctx[0].dataIndex].alm,
-            afterTitle: ctx => tieneConsumo
-              ? 'Exist: ' + arr[ctx[0].dataIndex].exist.toLocaleString('es-MX')
-              : '',
-            label: c => c.parsed.y.toLocaleString('es-MX') + ' días'
-          }
-        },
-        datalabels: {
-          anchor: 'end', align: 'end',
-          color: '#333',
-          font: { size: 10, weight: 'bold' },
-          formatter: v => v.toLocaleString('es-MX')
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { font: { size: 9 }, autoSkip: false, maxRotation: 0, minRotation: 0 }
-        },
-        y: {
-          display: false,
-          beginAtZero: true
-        }
-      }
-    },
+  chartInstances[3]=new Chart(DOM['chart-3'].getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{data:arr.map(x=>x.dias),backgroundColor:'#880015',borderRadius:3,borderSkipped:false}]},
+    options:{...CHART_BASE,layout:{padding:{top:20}},
+      plugins:{...CHART_BASE.plugins,
+        tooltip:{callbacks:{title:ctx=>arr[ctx[0].dataIndex].alm,label:c=>FMT(c.parsed.y)+' días'}},
+        datalabels:{anchor:'end',align:'end',color:'#333',font:{size:10,weight:'bold'},formatter:FMT}},
+      scales:{x:{grid:GRID_OFF,ticks:{font:{size:9},autoSkip:false,maxRotation:0,minRotation:0}},y:{display:false,beginAtZero:true}}}
   });
 
-  // Segunda fila de etiquetas con existencias totales (como en el original)
-  // Se agrega como anotación debajo de cada barra usando afterDatasets plugin
-  // Tabla detalle
-  document.getElementById('tbody-3').innerHTML = arr.map(x => `<tr>
-    <td class="label-col">${x.alm}</td>
-    <td>${x.n.toLocaleString('es-MX')}</td>
-    <td style="font-weight:700;color:#333F48">${x.dias.toLocaleString('es-MX')}</td>
-    <td>${x.exist.toLocaleString('es-MX')}</td>
-    <td>${tieneConsumo && agg[x.alm] ? (agg[x.alm].sumConsumo).toFixed(2) : '—'}</td>
-  </tr>`).join('');
+  DOM['tbody-3'].innerHTML=arr.map(x=>`<tr><td class="label-col">${x.alm}</td><td>${FMT(x.n)}</td><td style="font-weight:700;color:#333F48">${FMT(x.dias)}</td><td>${FMT(x.exist)}</td><td>${tieneConsumo&&agg[x.alm]?agg[x.alm].sumC.toFixed(2):'—'}</td></tr>`).join('');
 }
 
-// ============================================================
-// DESCARGA EXCEL
-// ============================================================
-function descargarExcel(panel) {
-  const table = document.getElementById(`tabla-${panel}`);
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.table_to_sheet(table);
-  const sheetName = panel === 1 ? 'Tipo Mantenimiento' : panel === 2 ? 'Por Almacén' : 'Días Inventario';
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  const ts = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `Inventario_${sheetName.replace(/ /g,'_')}_${ts}.xlsx`);
+// ══ DESCARGA EXCEL ═══════════════════════════════════════════
+function descargarExcel(panel){
+  const table=$(`tabla-${panel}`);
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.table_to_sheet(table);
+  const names={1:'Tipo_Mantenimiento',2:'Por_Almacen',3:'Dias_Inventario'};
+  XLSX.utils.book_append_sheet(wb,ws,names[panel]);
+  XLSX.writeFile(wb,`Inventario_${names[panel]}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
-// ============================================================
-// INIT
-// ============================================================
-window.addEventListener('load', cargarDatos);
+// ══ INIT ═════════════════════════════════════════════════════
+window.addEventListener('load',()=>{cacheDOM();cargarDatos();});
 
-// Carga manual desde el fileInput del overlay (solo si falla la autocarga)
-document.addEventListener('change', async function(e) {
-  if (e.target.id !== 'fileInput') return;
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    const sName = wb.SheetNames.includes('InventarioAlmacen') ? 'InventarioAlmacen' : wb.SheetNames[0];
-    RAW_INV = XLSX.utils.sheet_to_json(wb.Sheets[sName], { defval: '' });
-    const mpSheet = wb.SheetNames.find(s => /c[oó]digos|mp|mtto|cat[aá]logo/i.test(s) && s !== sName) || wb.SheetNames.find(s => s !== sName);
-    RAW_MP = mpSheet ? XLSX.utils.sheet_to_json(wb.Sheets[mpSheet], { defval: '' }) : [];
+// Carga manual (fallback si falla autocarga)
+document.addEventListener('change',async function(e){
+  if(e.target.id!=='fileInput') return;
+  const file=e.target.files[0]; if(!file) return;
+  try{
+    const buf=await file.arrayBuffer();
+    const{inv,mp}=parseWorkbook(buf);
+    RAW_INV=inv; RAW_MP=mp;
     procesarDatos();
     mostrarOverlay(false);
-  } catch(err) {
-    alert('Error al leer el archivo: ' + err.message);
-  }
+  }catch(err){alert('Error al leer el archivo: '+err.message);}
 });
 </script>
+
 </body>
 </html>
