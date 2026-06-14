@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inventario de Refacciones - Senda Citi</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
   <style>
     /* ============================================================
        VARIABLES CORPORATIVAS SENDA CITI
@@ -666,10 +664,18 @@
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
 // ============================================================
 // ESTADO GLOBAL
 // ============================================================
+// Registrar plugin de datalabels globalmente en Chart.js
+if (typeof ChartDataLabels !== 'undefined') {
+  Chart.register(ChartDataLabels);
+}
+
 const RAW_URL = 'https://raw.githubusercontent.com/EDSALAS15/Inventario-Refacciones-Citi/main/InventarioAlmacen.xlsx';
 let RAW_INV = [];   // Filas de hoja InventarioAlmacen
 let RAW_MP  = [];   // Filas catálogo MP
@@ -1066,7 +1072,6 @@ function renderPanel1() {
         y: { grid: { display: false }, ticks: { font: { size: 10 }, autoSkip: false } }
       }
     },
-    plugins: [ChartDataLabels]
   });
 
   // Tabla
@@ -1161,7 +1166,6 @@ function renderPanel2() {
         y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 10 }, callback: v => v.toLocaleString('es-MX') } }
       }
     },
-    plugins: [ChartDataLabels]
   });
 
   // Tabla
@@ -1336,7 +1340,6 @@ function renderPanel3() {
         }
       }
     },
-    plugins: [ChartDataLabels]
   });
 
   // Segunda fila de etiquetas con existencias totales (como en el original)
@@ -1367,7 +1370,7 @@ function descargarExcel(panel) {
 // ============================================================
 // INIT
 // ============================================================
-cargarDatos();
+window.addEventListener('load', cargarDatos);
 </script>
 </body>
 </html>
