@@ -366,36 +366,36 @@
       justify-content: center;
     }
     #overlay.show { display: flex; }
-    .overlay-box {
+    #uploadArea {
+      text-align: center;
+      padding: 40px;
+      border: 2px dashed #E4002B;
+      border-radius: 8px;
       background: #fff;
-      border-radius: 10px;
-      overflow: hidden;
-      width: 320px;
+      min-width: 320px;
       box-shadow: 0 8px 32px rgba(0,0,0,.3);
     }
-    .overlay-logo-bar {
-      background: var(--rojo);
-      height: 8px;
+    #uploadArea p {
+      color: #666;
+      font-size: 13px;
     }
-    .overlay-body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      padding: 32px 24px;
+    #autoLoadMsg {
+      color: #555;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    #manualLoad { display: none; }
+    #manualLoad input[type="file"] {
+      margin-top: 10px;
+      font-size: 12px;
     }
     .spinner {
-      width: 44px; height: 44px;
+      width: 36px; height: 36px;
       border: 4px solid #eee;
-      border-top-color: var(--rojo);
+      border-top-color: #E4002B;
       border-radius: 50%;
       animation: spin .8s linear infinite;
-    }
-    .overlay-text {
-      font-size: 13px;
-      font-weight: 600;
-      color: #555;
-      letter-spacing: .3px;
+      margin: 0 auto 12px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     /* SCROLLBARS */
@@ -409,11 +409,12 @@
 
 <!-- OVERLAY -->
 <div id="overlay">
-  <div class="overlay-box">
-    <div class="overlay-logo-bar"></div>
-    <div class="overlay-body">
-      <div class="spinner"></div>
-      <div class="overlay-text">Cargando datos automáticamente...</div>
+  <div id="uploadArea">
+    <div class="spinner"></div>
+    <div id="autoLoadMsg">&#9203; Cargando datos automáticamente...</div>
+    <div id="manualLoad">
+      <p>No se pudo cargar el archivo automáticamente.<br>Cárguelo manualmente:</p>
+      <input type="file" id="fileInput" accept=".xlsx">
     </div>
   </div>
 </div>
@@ -775,9 +776,13 @@ async function cargarDatos() {
     procesarDatos();
     // estado omitido
   } catch (e) {
-    // error omitido
     console.error(e);
+    // Fallo en autocarga: mostrar opción de carga manual sin cerrar overlay
+    document.getElementById('autoLoadMsg').style.display = 'none';
+    document.getElementById('manualLoad').style.display = 'block';
+    return; // El finally no debe cerrar el overlay en caso de error
   } finally {
+    // Solo cierra si no hubo error (el return del catch lo evita)
     mostrarOverlay(false);
   }
 }
@@ -1407,6 +1412,25 @@ function descargarExcel(panel) {
 // INIT
 // ============================================================
 window.addEventListener('load', cargarDatos);
+
+// Carga manual desde el fileInput del overlay (solo si falla la autocarga)
+document.addEventListener('change', async function(e) {
+  if (e.target.id !== 'fileInput') return;
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const sName = wb.SheetNames.includes('InventarioAlmacen') ? 'InventarioAlmacen' : wb.SheetNames[0];
+    RAW_INV = XLSX.utils.sheet_to_json(wb.Sheets[sName], { defval: '' });
+    const mpSheet = wb.SheetNames.find(s => /c[oó]digos|mp|mtto|cat[aá]logo/i.test(s) && s !== sName) || wb.SheetNames.find(s => s !== sName);
+    RAW_MP = mpSheet ? XLSX.utils.sheet_to_json(wb.Sheets[mpSheet], { defval: '' }) : [];
+    procesarDatos();
+    mostrarOverlay(false);
+  } catch(err) {
+    alert('Error al leer el archivo: ' + err.message);
+  }
+});
 </script>
 </body>
 </html>
