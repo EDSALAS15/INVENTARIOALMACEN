@@ -356,24 +356,13 @@
     tr:nth-child(even) td { background: #f9fafb; }
     tr:hover td { background: #edf3ff; }
     /* OVERLAY */
-    #overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.55);
-      z-index: 999;
-      align-items: center;
-      justify-content: center;
-    }
-    #overlay.show { display: flex; }
     #uploadArea {
       text-align: center;
       padding: 40px;
       border: 2px dashed #E4002B;
       border-radius: 8px;
       background: #fff;
-      min-width: 320px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.3);
+      margin: 20px;
     }
     #uploadArea p {
       color: #666;
@@ -382,20 +371,22 @@
     #autoLoadMsg {
       color: #555;
       font-size: 13px;
-      margin-bottom: 12px;
+      margin-bottom: 0;
     }
-    #manualLoad { display: none; }
+    #manualLoad { display: none; margin-top: 12px; }
     #manualLoad input[type="file"] {
       margin-top: 10px;
       font-size: 12px;
     }
     .spinner {
-      width: 36px; height: 36px;
-      border: 4px solid #eee;
+      width: 28px; height: 28px;
+      border: 3px solid #eee;
       border-top-color: #E4002B;
       border-radius: 50%;
       animation: spin .8s linear infinite;
-      margin: 0 auto 12px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     /* SCROLLBARS */
@@ -408,16 +399,7 @@
 <body>
 
 <!-- OVERLAY -->
-<div id="overlay">
-  <div id="uploadArea">
-    <div class="spinner"></div>
-    <div id="autoLoadMsg">&#9203; Cargando datos automáticamente...</div>
-    <div id="manualLoad">
-      <p>No se pudo cargar el archivo automáticamente.<br>Cárguelo manualmente:</p>
-      <input type="file" id="fileInput" accept=".xlsx">
-    </div>
-  </div>
-</div>
+
 
 <!-- HEADER -->
 <div class="header-bar">
@@ -434,7 +416,7 @@
 
   <!-- SIDEBAR -->
   <nav class="sidebar">
-    <div class="nav-group" id="group-1">
+    <div class="nav-group" id="group-1" style="display:none">
       <div class="nav-group-header open" onclick="toggleGroup('group-1')">
         <span>INVENTARIO</span><span class="arrow">&#9654;</span>
       </div>
@@ -449,8 +431,17 @@
   <!-- MAIN -->
   <main>
 
+    <!-- ====== PANTALLA DE CARGA ====== -->
+    <div id="uploadArea">
+      <div id="autoLoadMsg"><span class="spinner"></span>&#9203; Cargando datos automáticamente...</div>
+      <div id="manualLoad">
+        <p>No se pudo cargar el archivo automáticamente.<br>Cárguelo manualmente:</p>
+        <input type="file" id="fileInput" accept=".xlsx">
+      </div>
+    </div>
+
     <!-- ====== FILTROS GLOBALES (compartidos entre todas las pestañas) ====== -->
-    <div class="filtros" id="filtros-globales">
+    <div class="filtros" id="filtros-globales" style="display:none">
       <div class="filtro-group">
         <label>TIPO DE REFACCIÓN</label>
         <div class="dropdown" id="dd-refac">
@@ -756,7 +747,13 @@ function changeDash(n) {
 // OVERLAY
 // ============================================================
 function mostrarOverlay(b) {
-  document.getElementById('overlay').classList.toggle('show', !!b);
+  // b=true → mostrar pantalla de carga; b=false → ocultar y mostrar dashboard
+  document.getElementById('uploadArea').style.display = b ? 'block' : 'none';
+  document.getElementById('filtros-globales').style.display = b ? 'none' : 'flex';
+  document.getElementById('group-1').style.display = b ? 'none' : 'block';
+  document.querySelectorAll('.dash-panel').forEach(p => {
+    p.style.display = b ? 'none' : (p.classList.contains('active') ? 'block' : 'none');
+  });
 }
 
 // ============================================================
@@ -777,12 +774,11 @@ async function cargarDatos() {
     // estado omitido
   } catch (e) {
     console.error(e);
-    // Fallo en autocarga: mostrar opción de carga manual sin cerrar overlay
+    // Fallo en autocarga: mostrar carga manual
     document.getElementById('autoLoadMsg').style.display = 'none';
     document.getElementById('manualLoad').style.display = 'block';
-    return; // El finally no debe cerrar el overlay en caso de error
+    return; // No ocultar uploadArea
   } finally {
-    // Solo cierra si no hubo error (el return del catch lo evita)
     mostrarOverlay(false);
   }
 }
