@@ -389,6 +389,13 @@
       margin-right: 8px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Ocultar dashboard hasta que termine la carga */
+    body.cargando #filtros-globales,
+    body.cargando .dash-panel,
+    body.cargando #group-1 { display: none !important; }
+    body.cargando #uploadArea { display: block !important; }
+    #uploadArea { display: none; }
     /* SCROLLBARS */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #f0f0f0; }
@@ -396,7 +403,7 @@
     ::-webkit-scrollbar-thumb:hover { background: var(--side-bg); }
   </style>
 </head>
-<body>
+<body class="cargando">
 
 <!-- OVERLAY -->
 
@@ -416,7 +423,7 @@
 
   <!-- SIDEBAR -->
   <nav class="sidebar">
-    <div class="nav-group" id="group-1" style="display:none">
+    <div class="nav-group" id="group-1">
       <div class="nav-group-header open" onclick="toggleGroup('group-1')">
         <span>INVENTARIO</span><span class="arrow">&#9654;</span>
       </div>
@@ -441,7 +448,7 @@
     </div>
 
     <!-- ====== FILTROS GLOBALES (compartidos entre todas las pestañas) ====== -->
-    <div class="filtros" id="filtros-globales" style="display:none">
+    <div class="filtros" id="filtros-globales">
       <div class="filtro-group">
         <label>TIPO DE REFACCIÓN</label>
         <div class="dropdown" id="dd-refac">
@@ -749,11 +756,11 @@ function changeDash(n) {
 // OVERLAY
 // ============================================================
 function mostrarOverlay(b) {
-  document.getElementById('uploadArea').style.display = b ? 'block' : 'none';
-  document.getElementById('filtros-globales').style.display = b ? 'none' : 'flex';
-  document.getElementById('group-1').style.display = b ? 'none' : 'block';
-  // NO tocar style.display de los .dash-panel — se controlan solo por clase CSS
-  if (!b) {
+  if (b) {
+    document.body.classList.add('cargando');
+  } else {
+    document.body.classList.remove('cargando');
+    // Limpiar cualquier inline display que pueda haber quedado
     document.querySelectorAll('.dash-panel').forEach(p => p.style.display = '');
   }
 }
