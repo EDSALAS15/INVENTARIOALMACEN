@@ -378,17 +378,7 @@
       margin-top: 10px;
       font-size: 12px;
     }
-    .spinner {
-      width: 28px; height: 28px;
-      border: 3px solid #eee;
-      border-top-color: #E4002B;
-      border-radius: 50%;
-      animation: spin .8s linear infinite;
-      display: inline-block;
-      vertical-align: middle;
-      margin-right: 8px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
 
     /* Ocultar dashboard hasta que termine la carga */
     body.cargando #filtros-globales,
@@ -440,7 +430,7 @@
 
     <!-- ====== PANTALLA DE CARGA ====== -->
     <div id="uploadArea">
-      <div id="autoLoadMsg"><span class="spinner"></span>&#9203; Cargando datos automáticamente...</div>
+      <div id="autoLoadMsg">&#9203; Cargando datos automáticamente...</div>
       <div id="manualLoad">
         <p>No se pudo cargar el archivo automáticamente.<br>Cárguelo manualmente:</p>
         <input type="file" id="fileInput" accept=".xlsx">
